@@ -13,6 +13,8 @@ export const GameEvents = {
     MELEE_ATTACK: 'combat:melee_attack',
     MELEE_HIT: 'combat:melee_hit',
     BULLET_REFLECTED: 'combat:bullet_reflected',
+    RELOAD_STARTED: 'combat:reload_started',
+    RELOAD_COMPLETE: 'combat:reload_complete',
     
     // Movement events
     PLAYER_DASH: 'movement:player_dash',

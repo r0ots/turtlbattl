@@ -185,6 +185,17 @@ export class Player {
         // Reset movement position tracking
         if (this.movement) {
             this.movement.lastPosition = { x, y };
+            this.movement.isDashing = false;
+            this.movement.dashCooldown = 0;
+        }
+        
+        // Reset combat state (including ammo)
+        if (this.combat) {
+            this.combat.currentAmmo = GameConfig.player.magazineSize;
+            this.combat.isReloading = false;
+            this.combat.reloadTimer = 0;
+            this.combat.shootCooldown = 0;
+            this.combat.meleeCooldown = 0;
         }
         
         // Emit respawn event

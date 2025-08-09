@@ -13,9 +13,13 @@ export class PlayerUI {
         this.dashIndicator = null;
         this.meleeIndicator = null;
         this.directionIndicator = null;
+        this.ammoIndicators = [];
+        this.reloadBar = null;
+        this.reloadBarBg = null;
         
         this.createHealthBar();
         this.createDirectionIndicator();
+        this.createAmmoIndicators();
     }
     
     createHealthBar() {
@@ -97,12 +101,55 @@ export class PlayerUI {
         this.directionIndicator.y = this.sprite.y;
     }
     
+    createAmmoIndicators() {
+        const bulletSize = 8;
+        const bulletSpacing = 12;
+        const offsetY = -45; // Above the health bar
+        
+        // Create ammo bullets
+        for (let i = 0; i < GameConfig.player.magazineSize; i++) {
+            const offsetX = (i - (GameConfig.player.magazineSize - 1) / 2) * bulletSpacing;
+            const bullet = this.scene.add.circle(
+                this.sprite.x + offsetX,
+                this.sprite.y + offsetY,
+                bulletSize / 2,
+                GameConfig.bullet.colors[`player${this.player.playerNumber}`]
+            );
+            bullet.setOrigin(0.5, 0.5);
+            this.ammoIndicators.push(bullet);
+        }
+        
+        // Create reload bar (hidden initially)
+        const config = GameConfig.ui.healthBar;
+        this.reloadBarBg = this.scene.add.rectangle(
+            this.sprite.x,
+            this.sprite.y + offsetY,
+            config.width,
+            4,
+            0x333333
+        );
+        this.reloadBarBg.setOrigin(0.5, 0.5);
+        this.reloadBarBg.setVisible(false);
+        
+        this.reloadBar = this.scene.add.rectangle(
+            this.sprite.x,
+            this.sprite.y + offsetY,
+            config.width,
+            4,
+            0xFFFF00
+        );
+        this.reloadBar.setOrigin(0, 0.5);
+        this.reloadBar.x -= config.width / 2;
+        this.reloadBar.setVisible(false);
+    }
+    
     update() {
         if (!this.sprite) return;
         
         try {
             this.updateHealthBar();
             this.updateDirectionIndicator();
+            this.updateAmmoIndicators();
         } catch (error) {
             console.error('Error updating player UI:', error);
         }
@@ -166,6 +213,54 @@ export class PlayerUI {
         }
     }
     
+    updateAmmoIndicators() {
+        const bulletSpacing = 12;
+        const offsetY = -45;
+        
+        // Update ammo indicator positions and visibility
+        for (let i = 0; i < this.ammoIndicators.length; i++) {
+            const bullet = this.ammoIndicators[i];
+            const offsetX = (i - (GameConfig.player.magazineSize - 1) / 2) * bulletSpacing;
+            
+            bullet.x = this.sprite.x + offsetX;
+            bullet.y = this.sprite.y + offsetY;
+            
+            // Show/hide based on current ammo
+            if (i < this.player.combat.currentAmmo) {
+                bullet.setVisible(true);
+                bullet.setAlpha(1);
+            } else {
+                bullet.setAlpha(0.2); // Show empty bullets as dimmed
+            }
+        }
+        
+        // Update reload bar
+        if (this.player.combat.isReloading) {
+            this.reloadBarBg.setVisible(true);
+            this.reloadBar.setVisible(true);
+            
+            this.reloadBarBg.x = this.sprite.x;
+            this.reloadBarBg.y = this.sprite.y + offsetY;
+            
+            const config = GameConfig.ui.healthBar;
+            this.reloadBar.x = this.sprite.x - config.width / 2;
+            this.reloadBar.y = this.sprite.y + offsetY;
+            
+            // Calculate reload progress
+            const reloadProgress = 1 - (this.player.combat.reloadTimer / GameConfig.player.reloadTime);
+            this.reloadBar.scaleX = Math.max(0, Math.min(1, reloadProgress));
+            
+            // Hide ammo indicators during reload
+            this.ammoIndicators.forEach(bullet => bullet.setVisible(false));
+        } else {
+            this.reloadBarBg.setVisible(false);
+            this.reloadBar.setVisible(false);
+            
+            // Show ammo indicators when not reloading
+            this.ammoIndicators.forEach(bullet => bullet.setVisible(true));
+        }
+    }
+    
     updateDepth(positionChanged = false) {
         if (!this.sprite || !positionChanged) return;
         
@@ -176,6 +271,11 @@ export class PlayerUI {
         if (this.dashIndicator) this.dashIndicator.setDepth(depth + 2);
         if (this.meleeIndicator) this.meleeIndicator.setDepth(depth + 3);
         if (this.directionIndicator) this.directionIndicator.setDepth(depth + 5);
+        
+        // Update ammo indicators depth
+        this.ammoIndicators.forEach(bullet => bullet.setDepth(depth + 4));
+        if (this.reloadBar) this.reloadBar.setDepth(depth + 4);
+        if (this.reloadBarBg) this.reloadBarBg.setDepth(depth + 3);
     }
     
     setVisible(visible) {
@@ -184,6 +284,9 @@ export class PlayerUI {
         if (this.dashIndicator) this.dashIndicator.setVisible(visible);
         if (this.meleeIndicator) this.meleeIndicator.setVisible(visible);
         if (this.directionIndicator) this.directionIndicator.setVisible(visible);
+        this.ammoIndicators.forEach(bullet => bullet.setVisible(visible));
+        if (this.reloadBar) this.reloadBar.setVisible(visible && this.player.combat.isReloading);
+        if (this.reloadBarBg) this.reloadBarBg.setVisible(visible && this.player.combat.isReloading);
     }
     
     destroy() {
@@ -195,6 +298,19 @@ export class PlayerUI {
         if (this.healthBarBg) {
             this.healthBarBg.destroy();
             this.healthBarBg = null;
+        }
+        
+        this.ammoIndicators.forEach(bullet => bullet.destroy());
+        this.ammoIndicators = [];
+        
+        if (this.reloadBar) {
+            this.reloadBar.destroy();
+            this.reloadBar = null;
+        }
+        
+        if (this.reloadBarBg) {
+            this.reloadBarBg.destroy();
+            this.reloadBarBg = null;
         }
         
         if (this.dashIndicator) {

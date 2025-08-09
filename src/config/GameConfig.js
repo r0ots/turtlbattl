@@ -17,6 +17,8 @@ export const GameConfig = {
         speed: 200,
         rotationSpeed: 3,
         shootRate: 250,
+        magazineSize: 3,      // Number of bullets in magazine
+        reloadTime: 1500,     // Time to reload in ms
         size: 40,
         collisionSize: 30,
         colors: {

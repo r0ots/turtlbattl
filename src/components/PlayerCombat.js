@@ -18,6 +18,11 @@ export class PlayerCombat {
         this.meleeCooldown = 0;
         this.slashTime = 0;
         this.slashSprite = null;
+        
+        // Ammo state
+        this.currentAmmo = GameConfig.player.magazineSize;
+        this.isReloading = false;
+        this.reloadTimer = 0;
     }
     
     handleInput(gamepad) {
@@ -40,8 +45,21 @@ export class PlayerCombat {
             }
         }
         
-        if (shouldShoot && this.shootCooldown <= 0) {
+        if (shouldShoot && this.shootCooldown <= 0 && this.currentAmmo > 0 && !this.isReloading) {
             this.shoot();
+        }
+        
+        // Auto-reload when empty and trying to shoot
+        if (shouldShoot && this.currentAmmo === 0 && !this.isReloading) {
+            this.reload();
+        }
+        
+        // Manual reload on X button (button index 2)
+        if (gamepad && gamepad.connected && gamepad.buttons) {
+            const reloadPressed = gamepad.buttons[2]?.pressed; // X button
+            if (reloadPressed && this.currentAmmo < GameConfig.player.magazineSize && !this.isReloading) {
+                this.reload();
+            }
         }
     }
     
@@ -58,6 +76,21 @@ export class PlayerCombat {
                 this.meleeCooldown -= delta;
             }
             
+            // Update reload timer
+            if (this.isReloading) {
+                this.reloadTimer -= delta;
+                if (this.reloadTimer <= 0) {
+                    this.currentAmmo = GameConfig.player.magazineSize;
+                    this.isReloading = false;
+                    
+                    // Emit reload complete event
+                    this.eventBus.emit(GameEvents.RELOAD_COMPLETE, {
+                        player: this.player,
+                        ammo: this.currentAmmo
+                    });
+                }
+            }
+            
             this.updateMelee(delta);
         } catch (error) {
             console.error('Error updating player combat:', error);
@@ -65,23 +98,45 @@ export class PlayerCombat {
     }
     
     shoot() {
-        if (this.shootCooldown > 0 || this.player.isDead || !this.scene) return;
+        if (this.shootCooldown > 0 || this.player.isDead || !this.scene || this.currentAmmo <= 0 || this.isReloading) return;
         
         const shootDirection = this.player.movement.getShootDirection();
         
         try {
+            // Decrement ammo
+            this.currentAmmo--;
+            
             // Emit bullet fired event
             this.eventBus.emit(GameEvents.BULLET_FIRED, {
                 player: this.player,
                 playerNumber: this.player.playerNumber,
                 position: { x: this.sprite.x, y: this.sprite.y },
-                direction: shootDirection
+                direction: shootDirection,
+                ammoRemaining: this.currentAmmo
             });
             
             this.shootCooldown = this.player.shootRate;
+            
+            // Auto-reload if out of ammo
+            if (this.currentAmmo === 0) {
+                this.reload();
+            }
         } catch (error) {
             console.error('Failed to shoot:', error);
         }
+    }
+    
+    reload() {
+        if (this.isReloading || this.currentAmmo === GameConfig.player.magazineSize) return;
+        
+        this.isReloading = true;
+        this.reloadTimer = GameConfig.player.reloadTime;
+        
+        // Emit reload started event
+        this.eventBus.emit(GameEvents.RELOAD_STARTED, {
+            player: this.player,
+            reloadTime: GameConfig.player.reloadTime
+        });
     }
     
     melee() {
