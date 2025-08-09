@@ -59,6 +59,7 @@ export class Player {
             this.sprite.setData('player', this);
             
             this.createHealthBar();
+            this.createDirectionIndicator();
             
             this.aimDirection = { x: 1, y: 0 };
             this.moveDirection = { x: 0, y: 0 };
@@ -115,6 +116,37 @@ export class Player {
         );
         this.meleeIndicator.setOrigin(0, 0.5);
         this.meleeIndicator.x -= config.width / 2;
+    }
+    
+    createDirectionIndicator() {
+        // Create a triangle that's 80% of the player square size
+        // Darker version of player color (multiply by 0.4 for darkness)
+        const baseColor = GameConfig.player.colors[`player${this.playerNumber}`];
+        const darkColor = Phaser.Display.Color.GetColor(
+            ((baseColor >> 16) & 0xFF) * 0.3,
+            ((baseColor >> 8) & 0xFF) * 0.3,
+            (baseColor & 0xFF) * 0.3
+        );
+        
+        // Triangle 80% of player size (player is 40px, so 32px wide)
+        const triangleSize = GameConfig.player.size * 0.8; // 32px
+        
+        // Create the triangle as a graphics object directly on the scene
+        this.directionIndicator = this.scene.add.graphics();
+        this.directionIndicator.fillStyle(darkColor, 1);
+        
+        // Draw triangle centered at origin, pointing right
+        const halfWidth = triangleSize / 2;
+        this.directionIndicator.beginPath();
+        this.directionIndicator.moveTo(halfWidth, 0);           // Tip (pointing right)
+        this.directionIndicator.lineTo(-halfWidth, -halfWidth); // Top left
+        this.directionIndicator.lineTo(-halfWidth, halfWidth);  // Bottom left
+        this.directionIndicator.closePath();
+        this.directionIndicator.fillPath();
+        
+        // Position at player location
+        this.directionIndicator.x = this.sprite.x;
+        this.directionIndicator.y = this.sprite.y;
     }
     
     update(delta) {
@@ -258,6 +290,13 @@ export class Player {
     updateRotation() {
         if (!this.sprite) return;
         
+        // Always update direction indicator position and rotation (it needs to follow the player)
+        if (this.directionIndicator) {
+            this.directionIndicator.x = this.sprite.x;
+            this.directionIndicator.y = this.sprite.y;
+            this.directionIndicator.rotation = this.sprite.rotation;
+        }
+        
         // Apply deadzone for aiming to prevent drift
         const deadzone = GameConfig.player.gamepad.aimDeadzone;
         let aimX = this.aimDirection.x;
@@ -270,6 +309,11 @@ export class Player {
         
         const angle = Math.atan2(aimY, aimX);
         this.sprite.rotation = angle;
+        
+        // Update direction indicator rotation
+        if (this.directionIndicator) {
+            this.directionIndicator.rotation = angle;
+        }
     }
     
     updateHealthBar() {
@@ -331,6 +375,7 @@ export class Player {
         if (this.healthBarBg) this.healthBarBg.setDepth(depth);
         if (this.dashIndicator) this.dashIndicator.setDepth(depth + 2);
         if (this.meleeIndicator) this.meleeIndicator.setDepth(depth + 3);
+        if (this.directionIndicator) this.directionIndicator.setDepth(depth + 5);
     }
     
     shoot() {
@@ -391,6 +436,12 @@ export class Player {
         if (this.healthBarBg) this.healthBarBg.setVisible(false);
         if (this.dashIndicator) this.dashIndicator.setVisible(false);
         if (this.meleeIndicator) this.meleeIndicator.setVisible(false);
+        if (this.directionIndicator) this.directionIndicator.setVisible(false);
+        
+        // Notify the scene that this player died
+        if (this.scene && this.scene.onPlayerDeath) {
+            this.scene.onPlayerDeath(this);
+        }
     }
     
     respawn(x, y) {
@@ -408,6 +459,7 @@ export class Player {
         if (this.healthBarBg) this.healthBarBg.setVisible(true);
         if (this.dashIndicator) this.dashIndicator.setVisible(true);
         if (this.meleeIndicator) this.meleeIndicator.setVisible(true);
+        if (this.directionIndicator) this.directionIndicator.setVisible(true);
         
         this.lastPosition = { x, y };
     }
@@ -592,6 +644,7 @@ export class Player {
                 Math.cos(angleToTarget) * knockbackForce,
                 Math.sin(angleToTarget) * knockbackForce
             );
+            
         }
     }
     
@@ -666,6 +719,7 @@ export class Player {
         if (this.dashIndicator) this.dashIndicator.destroy();
         if (this.meleeIndicator) this.meleeIndicator.destroy();
         if (this.slashSprite) this.slashSprite.destroy();
+        if (this.directionIndicator) this.directionIndicator.destroy();
         
         this.sprite = null;
         this.healthBar = null;
