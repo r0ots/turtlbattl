@@ -4,6 +4,7 @@ import { Bullet } from '../entities/Bullet';
 import { IsometricUtils } from '../utils/IsometricUtils';
 import { GameConfig } from '../config/GameConfig';
 import { GameStateManager } from '../managers/GameStateManager';
+import { SoundManager } from '../managers/SoundManager';
 import { EventBus } from '../events/EventBus';
 import { GameEvents } from '../events/GameEvents';
 import { CollisionSystem } from '../systems/CollisionSystem';
@@ -22,19 +23,34 @@ export default class GameScene extends Phaser.Scene {
         // Initialize systems
         this.eventBus = new EventBus();
         this.collisionSystem = new CollisionSystem(this);
+        this.soundManager = new SoundManager(this);
         this.setupEventListeners();
     }
     
     setupEventListeners() {
         // Player events
         this.eventBus.on(GameEvents.PLAYER_DEATH, (data) => this.onPlayerDeath(data.player));
-        this.eventBus.on(GameEvents.BULLET_FIRED, (data) => this.createBullet(
-            data.position.x, 
-            data.position.y, 
-            data.direction.x, 
-            data.direction.y, 
-            data.playerNumber
-        ));
+        this.eventBus.on(GameEvents.BULLET_FIRED, (data) => {
+            this.createBullet(
+                data.position.x, 
+                data.position.y, 
+                data.direction.x, 
+                data.direction.y, 
+                data.playerNumber
+            );
+            this.soundManager.playShoot();
+        });
+        
+        // Sound events
+        this.eventBus.on(GameEvents.BULLET_HIT, () => this.soundManager.playHit());
+        this.eventBus.on(GameEvents.MELEE_HIT, () => this.soundManager.playHit());
+        this.eventBus.on(GameEvents.PLAYER_DAMAGE_TAKEN, () => this.soundManager.playDamage());
+        this.eventBus.on(GameEvents.PLAYER_DASH, () => this.soundManager.playDash());
+    }
+    
+    preload() {
+        // Load all sound assets
+        this.soundManager.preload();
     }
     
     create() {
@@ -138,6 +154,14 @@ export default class GameScene extends Phaser.Scene {
             
             if (bullet.owner !== player.playerNumber) {
                 player.takeDamage(bullet.damage);
+                
+                // Emit bullet hit event for sound
+                this.eventBus.emit(GameEvents.BULLET_HIT, {
+                    bullet: bullet,
+                    player: player,
+                    position: { x: bulletSprite.x, y: bulletSprite.y }
+                });
+                
                 bullet.destroy();
                 
                 const bulletIndex = this.bullets.indexOf(bullet);
