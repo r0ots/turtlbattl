@@ -30,6 +30,12 @@ export const GameConfig = {
         gamepad: {
             moveDeadzone: 0.15,  // Ignore stick input below this threshold
             aimDeadzone: 0.25    // Ignore aim input below this threshold
+        },
+        dash: {
+            speed: 600,          // Dash speed multiplier
+            duration: 200,       // Dash duration in ms
+            cooldown: 2000,      // Cooldown in ms (2 seconds)
+            distance: 120        // Total dash distance
         }
     },
     

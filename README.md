@@ -8,6 +8,7 @@ A fast-paced 2-player isometric twin-stick shooter game built with Phaser 3. Bat
 - 🎯 **2-player local multiplayer** - Battle against a friend on the same screen
 - 🕹️ **Xbox controller required** - Full gamepad support for both players
 - 🎯 **Analog sensitivity** - Movement speed varies with stick pressure
+- 💨 **Dash mechanic** - Quick dodge with cooldown indicator
 - 💚 **Health system** - Each player has 100 HP, bullets deal 25 damage
 - 🏆 **Score tracking** - Keep track of wins across multiple rounds
 - 🔄 **Automatic round restart** - New round starts after each victory
@@ -26,7 +27,8 @@ A fast-paced 2-player isometric twin-stick shooter game built with Phaser 3. Bat
 ### Gamepad Controls (Both Players)
 - **Left Stick:** Movement (analog - push gently for slow movement)
 - **Right Stick:** Aim direction
-- **Right Trigger (R2):** Shoot
+- **Right Trigger (RT/R2):** Shoot
+- **Right Bumper (RB/R1):** Dash (2 second cooldown)
 
 ## Getting Started
 

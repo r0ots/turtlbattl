@@ -19,6 +19,12 @@ export class Player {
         this.isDead = false;
         this.lastPosition = { x, y };
         
+        // Dash properties
+        this.isDashing = false;
+        this.dashCooldown = 0;
+        this.dashDirection = { x: 0, y: 0 };
+        this.dashTime = 0;
+        
         const color = GameConfig.player.colors[`player${playerNumber}`];
         
         try {
@@ -79,6 +85,17 @@ export class Player {
         this.healthBarBg.setOrigin(0.5, 0.5);
         this.healthBar.setOrigin(0, 0.5);
         this.healthBar.x -= config.width / 2;
+        
+        // Create dash cooldown indicator
+        this.dashIndicator = this.scene.add.rectangle(
+            this.sprite.x,
+            this.sprite.y - config.offsetY - 12,
+            config.width,
+            4,
+            0xFFFFFF
+        );
+        this.dashIndicator.setOrigin(0, 0.5);
+        this.dashIndicator.x -= config.width / 2;
     }
     
     update(delta) {
@@ -98,6 +115,12 @@ export class Player {
             if (this.shootCooldown > 0) {
                 this.shootCooldown -= delta;
             }
+            
+            if (this.dashCooldown > 0) {
+                this.dashCooldown -= delta;
+            }
+            
+            this.updateDash(delta);
         } catch (error) {
             console.error('Error updating player:', error);
         }
@@ -126,6 +149,11 @@ export class Player {
                 
                 shouldShoot = (this.gamepad.R2 && this.gamepad.R2 > 0.5) || 
                              (this.gamepad.buttons && this.gamepad.buttons[7]?.pressed);
+                
+                // RB button for dash (button index 5)
+                if (this.gamepad.buttons && this.gamepad.buttons[5]?.pressed) {
+                    this.dash();
+                }
             } catch (error) {
                 console.warn('Gamepad input error:', error);
             }
@@ -138,6 +166,9 @@ export class Player {
     
     updateMovement() {
         if (!this.sprite?.body) return;
+        
+        // Don't update regular movement if dashing
+        if (this.isDashing) return;
         
         // Preserve analog stick magnitude for variable speed
         let moveX = this.moveDirection.x;
@@ -191,6 +222,23 @@ export class Player {
         
         const healthPercent = Math.max(0, Math.min(1, this.health / this.maxHealth));
         this.healthBar.scaleX = healthPercent;
+        
+        // Update dash indicator
+        if (this.dashIndicator) {
+            this.dashIndicator.x = this.sprite.x - config.width / 2;
+            this.dashIndicator.y = this.sprite.y - config.offsetY - 12;
+            
+            // Show cooldown progress
+            const dashPercent = Math.max(0, 1 - (this.dashCooldown / GameConfig.player.dash.cooldown));
+            this.dashIndicator.scaleX = dashPercent;
+            
+            // Change color based on availability
+            if (this.dashCooldown <= 0) {
+                this.dashIndicator.setFillStyle(0x00FF00); // Green when ready
+            } else {
+                this.dashIndicator.setFillStyle(0xFFFFFF); // White when on cooldown
+            }
+        }
     }
     
     updateDepth() {
@@ -201,6 +249,7 @@ export class Player {
         
         if (this.healthBar) this.healthBar.setDepth(depth + 1);
         if (this.healthBarBg) this.healthBarBg.setDepth(depth);
+        if (this.dashIndicator) this.dashIndicator.setDepth(depth + 2);
     }
     
     shoot() {
@@ -259,6 +308,7 @@ export class Player {
         
         if (this.healthBar) this.healthBar.setVisible(false);
         if (this.healthBarBg) this.healthBarBg.setVisible(false);
+        if (this.dashIndicator) this.dashIndicator.setVisible(false);
     }
     
     respawn(x, y) {
@@ -274,14 +324,85 @@ export class Player {
         
         if (this.healthBar) this.healthBar.setVisible(true);
         if (this.healthBarBg) this.healthBarBg.setVisible(true);
+        if (this.dashIndicator) this.dashIndicator.setVisible(true);
         
         this.lastPosition = { x, y };
+    }
+    
+    dash() {
+        if (this.dashCooldown > 0 || this.isDashing || this.isDead) return;
+        
+        // Get dash direction from movement or facing direction
+        let dashX = this.moveDirection.x;
+        let dashY = this.moveDirection.y;
+        
+        // If not moving, dash in facing direction
+        const moveLength = Math.sqrt(dashX ** 2 + dashY ** 2);
+        if (moveLength < 0.1) {
+            dashX = Math.cos(this.sprite.rotation || 0);
+            dashY = Math.sin(this.sprite.rotation || 0);
+        } else {
+            // Normalize dash direction
+            dashX /= moveLength;
+            dashY /= moveLength;
+        }
+        
+        this.dashDirection = { x: dashX, y: dashY };
+        this.isDashing = true;
+        this.dashTime = GameConfig.player.dash.duration;
+        this.dashCooldown = GameConfig.player.dash.cooldown;
+        
+        // Visual feedback - make player semi-transparent during dash
+        this.sprite.setAlpha(0.7);
+        
+        // Add trail effect
+        this.createDashTrail();
+    }
+    
+    updateDash(delta) {
+        if (!this.isDashing) return;
+        
+        this.dashTime -= delta;
+        
+        if (this.dashTime <= 0) {
+            this.isDashing = false;
+            this.sprite.setAlpha(1);
+        } else {
+            // Apply dash velocity
+            this.sprite.body.setVelocity(
+                this.dashDirection.x * GameConfig.player.dash.speed,
+                this.dashDirection.y * GameConfig.player.dash.speed
+            );
+        }
+    }
+    
+    createDashTrail() {
+        // Create a trail effect
+        const trail = this.scene.add.rectangle(
+            this.sprite.x,
+            this.sprite.y,
+            GameConfig.player.size,
+            GameConfig.player.size,
+            GameConfig.player.colors[`player${this.playerNumber}`]
+        );
+        trail.setAlpha(0.5);
+        trail.setDepth(this.sprite.depth - 1);
+        
+        this.scene.tweens.add({
+            targets: trail,
+            alpha: 0,
+            scaleX: 0.5,
+            scaleY: 0.5,
+            duration: 300,
+            onComplete: () => trail.destroy()
+        });
     }
     
     destroy() {
         if (this.sprite) this.sprite.destroy();
         if (this.healthBar) this.healthBar.destroy();
         if (this.healthBarBg) this.healthBarBg.destroy();
+        if (this.dashIndicator) this.dashIndicator.destroy();
         
         this.sprite = null;
         this.healthBar = null;
