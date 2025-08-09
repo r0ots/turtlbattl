@@ -63,10 +63,10 @@ src/
 ## 🎯 Key Features Implemented
 
 ### Controls
-- **Dual control schemes**: Xbox controllers + keyboard fallback
-- **Twin-stick mechanics**: Independent movement and aiming
-- **Player 1**: WASD + IJKL + Space (Green, Controller 1)
-- **Player 2**: Arrows + Numpad + Numpad0 (Blue, Controller 2)
+- **Gamepad only**: Xbox controllers required (no keyboard support)
+- **Twin-stick mechanics**: Independent movement and aiming with analog sensitivity
+- **Player 1**: Controller 1 (Green)
+- **Player 2**: Controller 2 (Blue)
 
 ### Game Systems
 - **Health System**: 100 HP per player, health bars above characters
@@ -170,6 +170,8 @@ git push            # Push to GitHub
 - Fixed critical bugs (bullet movement, memory leaks)
 - Set up Git repository and pushed to GitHub
 - Created comprehensive documentation
+- Added analog stick sensitivity for variable movement speed
+- Removed all keyboard support (gamepad-only now)
 
 ### Next Session Priorities
 1. Add sound effects for better game feel

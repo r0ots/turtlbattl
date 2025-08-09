@@ -1,4 +1,3 @@
-import Phaser from 'phaser';
 import { IsometricUtils } from '../utils/IsometricUtils';
 import { TextureFactory } from '../utils/TextureFactory';
 import { GameConfig } from '../config/GameConfig';
@@ -51,44 +50,10 @@ export class Player {
             this.moveDirection = { x: 0, y: 0 };
             
             this.gamepad = null;
-            this.setupKeyboardControls();
             
         } catch (error) {
             console.error('Failed to create player:', error);
             throw error;
-        }
-    }
-    
-    setupKeyboardControls() {
-        try {
-            const controls = GameConfig.controls[`player${this.playerNumber}`].keyboard;
-            
-            this.keyboard = {};
-            
-            if (this.playerNumber === 1) {
-                this.keyboard.up = this.scene.input.keyboard.addKey(controls.up);
-                this.keyboard.down = this.scene.input.keyboard.addKey(controls.down);
-                this.keyboard.left = this.scene.input.keyboard.addKey(controls.left);
-                this.keyboard.right = this.scene.input.keyboard.addKey(controls.right);
-                this.keyboard.aimUp = this.scene.input.keyboard.addKey(controls.aimUp);
-                this.keyboard.aimDown = this.scene.input.keyboard.addKey(controls.aimDown);
-                this.keyboard.aimLeft = this.scene.input.keyboard.addKey(controls.aimLeft);
-                this.keyboard.aimRight = this.scene.input.keyboard.addKey(controls.aimRight);
-                this.keyboard.shoot = this.scene.input.keyboard.addKey(controls.shoot);
-            } else {
-                this.keyboard.up = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes[controls.up]);
-                this.keyboard.down = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes[controls.down]);
-                this.keyboard.left = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes[controls.left]);
-                this.keyboard.right = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes[controls.right]);
-                this.keyboard.aimUp = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes[controls.aimUp]);
-                this.keyboard.aimDown = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes[controls.aimDown]);
-                this.keyboard.aimLeft = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes[controls.aimLeft]);
-                this.keyboard.aimRight = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes[controls.aimRight]);
-                this.keyboard.shoot = this.scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes[controls.shoot]);
-            }
-        } catch (error) {
-            console.error('Failed to setup keyboard controls:', error);
-            this.keyboard = null;
         }
     }
     
@@ -166,24 +131,6 @@ export class Player {
             }
         }
         
-        if (this.keyboard) {
-            try {
-                if (this.keyboard.left?.isDown) this.moveDirection.x = -1;
-                if (this.keyboard.right?.isDown) this.moveDirection.x = 1;
-                if (this.keyboard.up?.isDown) this.moveDirection.y = -1;
-                if (this.keyboard.down?.isDown) this.moveDirection.y = 1;
-                
-                if (this.keyboard.aimLeft?.isDown) this.aimDirection.x = -1;
-                if (this.keyboard.aimRight?.isDown) this.aimDirection.x = 1;
-                if (this.keyboard.aimUp?.isDown) this.aimDirection.y = -1;
-                if (this.keyboard.aimDown?.isDown) this.aimDirection.y = 1;
-                
-                if (this.keyboard.shoot?.isDown) shouldShoot = true;
-            } catch (error) {
-                console.warn('Keyboard input error:', error);
-            }
-        }
-        
         if (shouldShoot && this.shootCooldown <= 0) {
             this.shoot();
         }
@@ -192,26 +139,43 @@ export class Player {
     updateMovement() {
         if (!this.sprite?.body) return;
         
-        const length = Math.sqrt(this.moveDirection.x ** 2 + this.moveDirection.y ** 2);
-        if (length > 0) {
-            this.moveDirection.x /= length;
-            this.moveDirection.y /= length;
+        // Preserve analog stick magnitude for variable speed
+        let moveX = this.moveDirection.x;
+        let moveY = this.moveDirection.y;
+        
+        // Apply deadzone to prevent drift
+        const deadzone = GameConfig.player.gamepad.moveDeadzone;
+        if (Math.abs(moveX) < deadzone) moveX = 0;
+        if (Math.abs(moveY) < deadzone) moveY = 0;
+        
+        // Clamp to unit circle to prevent going too fast
+        const length = Math.sqrt(moveX ** 2 + moveY ** 2);
+        if (length > 1) {
+            moveX /= length;
+            moveY /= length;
         }
         
         this.sprite.body.setVelocity(
-            this.moveDirection.x * this.speed,
-            this.moveDirection.y * this.speed
+            moveX * this.speed,
+            moveY * this.speed
         );
     }
     
     updateRotation() {
         if (!this.sprite) return;
         
-        const length = Math.sqrt(this.aimDirection.x ** 2 + this.aimDirection.y ** 2);
-        if (length > 0.1) {
-            const angle = Math.atan2(this.aimDirection.y, this.aimDirection.x);
-            this.sprite.rotation = angle;
+        // Apply deadzone for aiming to prevent drift
+        const deadzone = GameConfig.player.gamepad.aimDeadzone;
+        let aimX = this.aimDirection.x;
+        let aimY = this.aimDirection.y;
+        
+        if (Math.abs(aimX) < deadzone && Math.abs(aimY) < deadzone) {
+            // Not aiming, maintain current rotation
+            return;
         }
+        
+        const angle = Math.atan2(aimY, aimX);
+        this.sprite.rotation = angle;
     }
     
     updateHealthBar() {

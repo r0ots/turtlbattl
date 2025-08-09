@@ -26,6 +26,10 @@ export const GameConfig = {
         spawnPositions: {
             player1: { x: 300, y: 360 },
             player2: { x: 980, y: 360 }
+        },
+        gamepad: {
+            moveDeadzone: 0.15,  // Ignore stick input below this threshold
+            aimDeadzone: 0.25    // Ignore aim input below this threshold
         }
     },
     
@@ -58,35 +62,6 @@ export const GameConfig = {
             controlsText: {
                 fontSize: '14px',
                 fill: '#888888'
-            }
-        }
-    },
-    
-    controls: {
-        player1: {
-            keyboard: {
-                up: 'W',
-                down: 'S',
-                left: 'A',
-                right: 'D',
-                aimUp: 'I',
-                aimDown: 'K',
-                aimLeft: 'J',
-                aimRight: 'L',
-                shoot: 'SPACE'
-            }
-        },
-        player2: {
-            keyboard: {
-                up: 'UP',
-                down: 'DOWN',
-                left: 'LEFT',
-                right: 'RIGHT',
-                aimUp: 'NUMPAD_EIGHT',
-                aimDown: 'NUMPAD_FIVE',
-                aimLeft: 'NUMPAD_FOUR',
-                aimRight: 'NUMPAD_SIX',
-                shoot: 'NUMPAD_ZERO'
             }
         }
     }

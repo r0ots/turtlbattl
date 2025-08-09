@@ -126,7 +126,7 @@ export default class GameScene extends Phaser.Scene {
         this.controlsText = this.add.text(
             centerX,
             GameConfig.game.height - 30,
-            'P1: WASD to move, IJKL to aim, SPACE to shoot | P2: Arrows to move, Numpad 8456 to aim, Numpad 0 to shoot',
+            'Xbox Controllers Required | Left Stick: Move | Right Stick: Aim | Right Trigger: Shoot',
             textConfig.controlsText
         );
         this.controlsText.setOrigin(0.5, 0.5);
