@@ -51,7 +51,9 @@ export class Player {
                 this.sprite.setScale(1);
             }
             
-            this.sprite.setCollideWorldBounds(true);
+            // Set collision bounds to arena area
+            const margin = GameConfig.arena.margin;
+            this.sprite.body.setCollideWorldBounds(false); // Disable default world bounds
             this.sprite.body.setSize(GameConfig.player.collisionSize, GameConfig.player.collisionSize);
             
             this.sprite.setData('player', this);
@@ -121,6 +123,7 @@ export class Player {
         try {
             this.handleInput();
             this.updateMovement();
+            this.constrainToArena();
             this.updateRotation();
             this.updateHealthBar();
             
@@ -219,6 +222,37 @@ export class Player {
             moveX * this.speed,
             moveY * this.speed
         );
+    }
+    
+    constrainToArena() {
+        if (!this.sprite) return;
+        
+        const margin = GameConfig.arena.margin;
+        const halfSize = GameConfig.player.collisionSize / 2;
+        
+        // Constrain X position
+        const minX = margin + halfSize;
+        const maxX = GameConfig.game.width - margin - halfSize;
+        
+        if (this.sprite.x < minX) {
+            this.sprite.x = minX;
+            this.sprite.body.setVelocityX(0);
+        } else if (this.sprite.x > maxX) {
+            this.sprite.x = maxX;
+            this.sprite.body.setVelocityX(0);
+        }
+        
+        // Constrain Y position
+        const minY = margin + halfSize;
+        const maxY = GameConfig.game.height - margin - halfSize;
+        
+        if (this.sprite.y < minY) {
+            this.sprite.y = minY;
+            this.sprite.body.setVelocityY(0);
+        } else if (this.sprite.y > maxY) {
+            this.sprite.y = maxY;
+            this.sprite.body.setVelocityY(0);
+        }
     }
     
     updateRotation() {
@@ -422,6 +456,9 @@ export class Player {
                 this.dashDirection.x * GameConfig.player.dash.speed,
                 this.dashDirection.y * GameConfig.player.dash.speed
             );
+            
+            // Still constrain to arena even while dashing
+            this.constrainToArena();
         }
     }
     
