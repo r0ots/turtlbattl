@@ -616,35 +616,60 @@ export class Player {
         const otherPlayer = this.scene.players.find(p => p.playerNumber !== this.playerNumber);
         if (!otherPlayer || otherPlayer.isDead) return;
         
-        // Calculate distance and angle to other player
-        const dx = otherPlayer.sprite.x - this.sprite.x;
-        const dy = otherPlayer.sprite.y - this.sprite.y;
-        const distance = Math.sqrt(dx * dx + dy * dy);
+        // Get the other player's hitbox corners
+        const halfSize = GameConfig.player.collisionSize / 2;
+        const otherX = otherPlayer.sprite.x;
+        const otherY = otherPlayer.sprite.y;
         
-        if (distance > GameConfig.player.melee.range) return;
+        // Check multiple points on the other player's hitbox
+        const checkPoints = [
+            { x: otherX, y: otherY },                    // Center
+            { x: otherX - halfSize, y: otherY - halfSize }, // Top-left
+            { x: otherX + halfSize, y: otherY - halfSize }, // Top-right
+            { x: otherX - halfSize, y: otherY + halfSize }, // Bottom-left
+            { x: otherX + halfSize, y: otherY + halfSize }, // Bottom-right
+            { x: otherX, y: otherY - halfSize },           // Top-center
+            { x: otherX, y: otherY + halfSize },           // Bottom-center
+            { x: otherX - halfSize, y: otherY },           // Left-center
+            { x: otherX + halfSize, y: otherY }            // Right-center
+        ];
         
-        // Check if other player is within slash arc
-        const angleToTarget = Math.atan2(dy, dx);
         const myAngle = this.sprite.rotation;
-        
-        // Normalize angle difference
-        let angleDiff = angleToTarget - myAngle;
-        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
-        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
-        
         const arcRadians = (GameConfig.player.melee.arc * Math.PI) / 180;
+        const range = GameConfig.player.melee.range;
         
-        if (Math.abs(angleDiff) <= arcRadians / 2) {
-            // Hit!
-            otherPlayer.takeDamage(GameConfig.player.melee.damage);
+        // Check if any point of the player is within the slash arc
+        for (const point of checkPoints) {
+            const dx = point.x - this.sprite.x;
+            const dy = point.y - this.sprite.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
             
-            // Knockback effect
-            const knockbackForce = 200;
-            otherPlayer.sprite.body.setVelocity(
-                Math.cos(angleToTarget) * knockbackForce,
-                Math.sin(angleToTarget) * knockbackForce
-            );
+            // Skip if point is too far
+            if (distance > range) continue;
             
+            // Check angle to this point
+            const angleToPoint = Math.atan2(dy, dx);
+            
+            // Normalize angle difference
+            let angleDiff = angleToPoint - myAngle;
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+            
+            // If any point is within the arc, it's a hit
+            if (Math.abs(angleDiff) <= arcRadians / 2) {
+                // Hit!
+                otherPlayer.takeDamage(GameConfig.player.melee.damage);
+                
+                // Knockback effect (push away from attacker)
+                const knockbackForce = 200;
+                const knockbackAngle = Math.atan2(otherY - this.sprite.y, otherX - this.sprite.x);
+                otherPlayer.sprite.body.setVelocity(
+                    Math.cos(knockbackAngle) * knockbackForce,
+                    Math.sin(knockbackAngle) * knockbackForce
+                );
+                
+                return; // Stop checking after first hit
+            }
         }
     }
     
