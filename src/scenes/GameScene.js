@@ -126,7 +126,7 @@ export default class GameScene extends Phaser.Scene {
         this.controlsText = this.add.text(
             centerX,
             GameConfig.game.height - 30,
-            'Xbox Controllers Required | Left Stick: Move | Right Stick: Aim | RT: Shoot | RB: Dash',
+            'Xbox Controllers Required | LS: Move | RS: Aim | RT: Shoot | RB: Dash | LT: Slash',
             textConfig.controlsText
         );
         this.controlsText.setOrigin(0.5, 0.5);

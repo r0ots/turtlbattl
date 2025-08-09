@@ -36,6 +36,13 @@ export const GameConfig = {
             duration: 200,       // Dash duration in ms
             cooldown: 2000,      // Cooldown in ms (2 seconds)
             distance: 120        // Total dash distance
+        },
+        melee: {
+            damage: 50,          // Melee damage
+            range: 120,          // Slash range (doubled from 60)
+            arc: 52,             // Slash arc in degrees (30% wider than 40)
+            duration: 150,       // Slash animation duration in ms
+            cooldown: 2000       // Cooldown in ms (2 seconds)
         }
     },
     

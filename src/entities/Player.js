@@ -25,6 +25,12 @@ export class Player {
         this.dashDirection = { x: 0, y: 0 };
         this.dashTime = 0;
         
+        // Melee properties
+        this.isSlashing = false;
+        this.meleeCooldown = 0;
+        this.slashTime = 0;
+        this.slashSprite = null;
+        
         const color = GameConfig.player.colors[`player${playerNumber}`];
         
         try {
@@ -96,6 +102,17 @@ export class Player {
         );
         this.dashIndicator.setOrigin(0, 0.5);
         this.dashIndicator.x -= config.width / 2;
+        
+        // Create melee cooldown indicator
+        this.meleeIndicator = this.scene.add.rectangle(
+            this.sprite.x,
+            this.sprite.y - config.offsetY - 18,
+            config.width,
+            4,
+            0xFFFFFF
+        );
+        this.meleeIndicator.setOrigin(0, 0.5);
+        this.meleeIndicator.x -= config.width / 2;
     }
     
     update(delta) {
@@ -120,7 +137,12 @@ export class Player {
                 this.dashCooldown -= delta;
             }
             
+            if (this.meleeCooldown > 0) {
+                this.meleeCooldown -= delta;
+            }
+            
             this.updateDash(delta);
+            this.updateMelee(delta);
         } catch (error) {
             console.error('Error updating player:', error);
         }
@@ -153,6 +175,13 @@ export class Player {
                 // RB button for dash (button index 5)
                 if (this.gamepad.buttons && this.gamepad.buttons[5]?.pressed) {
                     this.dash();
+                }
+                
+                // LT button for melee (L2 trigger or button index 6)
+                const meleePressed = (this.gamepad.L2 && this.gamepad.L2 > 0.5) || 
+                                   (this.gamepad.buttons && this.gamepad.buttons[6]?.pressed);
+                if (meleePressed) {
+                    this.melee();
                 }
             } catch (error) {
                 console.warn('Gamepad input error:', error);
@@ -239,6 +268,23 @@ export class Player {
                 this.dashIndicator.setFillStyle(0xFFFFFF); // White when on cooldown
             }
         }
+        
+        // Update melee indicator
+        if (this.meleeIndicator) {
+            this.meleeIndicator.x = this.sprite.x - config.width / 2;
+            this.meleeIndicator.y = this.sprite.y - config.offsetY - 18;
+            
+            // Show cooldown progress
+            const meleePercent = Math.max(0, 1 - (this.meleeCooldown / GameConfig.player.melee.cooldown));
+            this.meleeIndicator.scaleX = meleePercent;
+            
+            // Change color based on availability
+            if (this.meleeCooldown <= 0) {
+                this.meleeIndicator.setFillStyle(0xFF6600); // Orange when ready
+            } else {
+                this.meleeIndicator.setFillStyle(0xFFFFFF); // White when on cooldown
+            }
+        }
     }
     
     updateDepth() {
@@ -250,6 +296,7 @@ export class Player {
         if (this.healthBar) this.healthBar.setDepth(depth + 1);
         if (this.healthBarBg) this.healthBarBg.setDepth(depth);
         if (this.dashIndicator) this.dashIndicator.setDepth(depth + 2);
+        if (this.meleeIndicator) this.meleeIndicator.setDepth(depth + 3);
     }
     
     shoot() {
@@ -309,6 +356,7 @@ export class Player {
         if (this.healthBar) this.healthBar.setVisible(false);
         if (this.healthBarBg) this.healthBarBg.setVisible(false);
         if (this.dashIndicator) this.dashIndicator.setVisible(false);
+        if (this.meleeIndicator) this.meleeIndicator.setVisible(false);
     }
     
     respawn(x, y) {
@@ -325,6 +373,7 @@ export class Player {
         if (this.healthBar) this.healthBar.setVisible(true);
         if (this.healthBarBg) this.healthBarBg.setVisible(true);
         if (this.dashIndicator) this.dashIndicator.setVisible(true);
+        if (this.meleeIndicator) this.meleeIndicator.setVisible(true);
         
         this.lastPosition = { x, y };
     }
@@ -398,11 +447,188 @@ export class Player {
         });
     }
     
+    melee() {
+        if (this.meleeCooldown > 0 || this.isSlashing || this.isDead) return;
+        
+        this.isSlashing = true;
+        this.slashTime = GameConfig.player.melee.duration;
+        this.meleeCooldown = GameConfig.player.melee.cooldown;
+        
+        // Create slash visual
+        this.createSlashEffect();
+        
+        // Check for hit on other player
+        this.checkMeleeHit();
+        
+        // Check for bullet reflection
+        this.checkBulletReflection();
+    }
+    
+    updateMelee(delta) {
+        if (!this.isSlashing) return;
+        
+        this.slashTime -= delta;
+        
+        if (this.slashTime <= 0) {
+            this.isSlashing = false;
+            if (this.slashSprite) {
+                this.slashSprite.destroy();
+                this.slashSprite = null;
+            }
+        }
+    }
+    
+    createSlashEffect() {
+        const range = GameConfig.player.melee.range;
+        const angle = this.sprite.rotation;
+        
+        // Create arc visual effect
+        const graphics = this.scene.add.graphics();
+        const color = GameConfig.player.colors[`player${this.playerNumber}`];
+        
+        graphics.fillStyle(color, 0.3);
+        graphics.lineStyle(2, color, 0.8);
+        
+        // Draw arc sector
+        const arcRadians = (GameConfig.player.melee.arc * Math.PI) / 180;
+        graphics.beginPath();
+        graphics.moveTo(this.sprite.x, this.sprite.y);
+        graphics.arc(
+            this.sprite.x,
+            this.sprite.y,
+            range,
+            angle - arcRadians / 2,
+            angle + arcRadians / 2,
+            false
+        );
+        graphics.closePath();
+        graphics.fillPath();
+        graphics.strokePath();
+        
+        this.slashSprite = graphics;
+        this.slashSprite.setDepth(this.sprite.depth + 10);
+        
+        // Animate the slash
+        this.scene.tweens.add({
+            targets: this.slashSprite,
+            alpha: { from: 0.8, to: 0 },
+            duration: GameConfig.player.melee.duration,
+            onComplete: () => {
+                if (this.slashSprite) {
+                    this.slashSprite.destroy();
+                    this.slashSprite = null;
+                }
+            }
+        });
+    }
+    
+    checkMeleeHit() {
+        // Find the other player
+        const otherPlayer = this.scene.players.find(p => p.playerNumber !== this.playerNumber);
+        if (!otherPlayer || otherPlayer.isDead) return;
+        
+        // Calculate distance and angle to other player
+        const dx = otherPlayer.sprite.x - this.sprite.x;
+        const dy = otherPlayer.sprite.y - this.sprite.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        
+        if (distance > GameConfig.player.melee.range) return;
+        
+        // Check if other player is within slash arc
+        const angleToTarget = Math.atan2(dy, dx);
+        const myAngle = this.sprite.rotation;
+        
+        // Normalize angle difference
+        let angleDiff = angleToTarget - myAngle;
+        while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+        while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+        
+        const arcRadians = (GameConfig.player.melee.arc * Math.PI) / 180;
+        
+        if (Math.abs(angleDiff) <= arcRadians / 2) {
+            // Hit!
+            otherPlayer.takeDamage(GameConfig.player.melee.damage);
+            
+            // Knockback effect
+            const knockbackForce = 200;
+            otherPlayer.sprite.body.setVelocity(
+                Math.cos(angleToTarget) * knockbackForce,
+                Math.sin(angleToTarget) * knockbackForce
+            );
+        }
+    }
+    
+    checkBulletReflection() {
+        const bullets = this.scene.bullets;
+        const range = GameConfig.player.melee.range;
+        const arcRadians = (GameConfig.player.melee.arc * Math.PI) / 180;
+        
+        bullets.forEach(bullet => {
+            if (!bullet || bullet.isDestroyed || !bullet.sprite) return;
+            
+            // Don't reflect own bullets
+            if (bullet.owner === this.playerNumber) return;
+            
+            // Calculate distance and angle to bullet
+            const dx = bullet.sprite.x - this.sprite.x;
+            const dy = bullet.sprite.y - this.sprite.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > range) return;
+            
+            // Check if bullet is within slash arc
+            const angleToBullet = Math.atan2(dy, dx);
+            const myAngle = this.sprite.rotation;
+            
+            // Normalize angle difference
+            let angleDiff = angleToBullet - myAngle;
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+            
+            if (Math.abs(angleDiff) <= arcRadians / 2) {
+                // Reflect the bullet!
+                bullet.owner = this.playerNumber; // Change ownership
+                
+                // Reverse and redirect velocity
+                const reflectAngle = myAngle;
+                bullet.velocity = {
+                    x: Math.cos(reflectAngle) * GameConfig.bullet.speed,
+                    y: Math.sin(reflectAngle) * GameConfig.bullet.speed
+                };
+                bullet.sprite.body.setVelocity(bullet.velocity.x, bullet.velocity.y);
+                bullet.sprite.rotation = reflectAngle;
+                
+                // Change bullet color to match new owner
+                const color = GameConfig.bullet.colors[`player${this.playerNumber}`];
+                bullet.sprite.setTint(color);
+                
+                // Visual feedback for reflection
+                this.createReflectEffect(bullet.sprite.x, bullet.sprite.y);
+            }
+        });
+    }
+    
+    createReflectEffect(x, y) {
+        const effect = this.scene.add.circle(x, y, 15, 0xFFFFFF);
+        effect.setAlpha(0.8);
+        effect.setDepth(1000);
+        
+        this.scene.tweens.add({
+            targets: effect,
+            scale: { from: 0.5, to: 2 },
+            alpha: { from: 0.8, to: 0 },
+            duration: 200,
+            onComplete: () => effect.destroy()
+        });
+    }
+    
     destroy() {
         if (this.sprite) this.sprite.destroy();
         if (this.healthBar) this.healthBar.destroy();
         if (this.healthBarBg) this.healthBarBg.destroy();
         if (this.dashIndicator) this.dashIndicator.destroy();
+        if (this.meleeIndicator) this.meleeIndicator.destroy();
+        if (this.slashSprite) this.slashSprite.destroy();
         
         this.sprite = null;
         this.healthBar = null;
