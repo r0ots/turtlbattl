@@ -65,17 +65,74 @@ export const GameConfig = {
             offsetY: 30,
             backgroundColor: 0x333333
         },
+        dashIndicator: {
+            offsetY: 12,
+            height: 4,
+            readyColor: 0x00FF00,
+            cooldownColor: 0xFFFFFF
+        },
+        meleeIndicator: {
+            offsetY: 18,
+            height: 4,
+            readyColor: 0xFF6600,
+            cooldownColor: 0xFFFFFF
+        },
+        directionIndicator: {
+            sizeRatio: 0.8,  // 80% of player size
+            darknessFactor: 0.3  // 30% brightness
+        },
         text: {
             roundText: {
                 fontSize: '32px',
                 fill: '#ffffff',
                 stroke: '#000000',
-                strokeThickness: 4
+                strokeThickness: 4,
+                yPosition: 30
             },
             controlsText: {
                 fontSize: '14px',
-                fill: '#888888'
+                fill: '#888888',
+                yOffset: 30
             }
         }
+    },
+    
+    effects: {
+        hitFlash: {
+            alpha: 0.3,
+            duration: 100,
+            repeat: 2
+        },
+        dashTrail: {
+            alpha: 0.5,
+            duration: 300,
+            finalScale: 0.5
+        },
+        slashFade: {
+            alphaFrom: 0.8,
+            alphaTo: 0,
+            depth: 10
+        },
+        bulletReflect: {
+            size: 15,
+            color: 0xFFFFFF,
+            alpha: 0.8,
+            duration: 200,
+            finalScale: 2,
+            depth: 1000
+        },
+        knockback: {
+            force: 200
+        },
+        roundEnd: {
+            scale: 1.5,
+            duration: 300,
+            delay: 2000
+        }
+    },
+    
+    physics: {
+        deadzone: 0.001,  // Minimum vector length
+        degreesToRadians: Math.PI / 180
     }
 };

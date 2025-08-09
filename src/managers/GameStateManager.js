@@ -4,6 +4,22 @@ export class GameStateManager {
         this.state = 'playing';
         this.scores = { player1: 0, player2: 0 };
         this.roundInProgress = true;
+        
+        // Cache DOM elements for performance
+        this.domElements = {
+            p1Score: null,
+            p2Score: null
+        };
+        this.cacheDOMElements();
+    }
+    
+    cacheDOMElements() {
+        try {
+            this.domElements.p1Score = document.getElementById('p1-score');
+            this.domElements.p2Score = document.getElementById('p2-score');
+        } catch (error) {
+            console.warn('Failed to cache DOM elements:', error);
+        }
     }
     
     setState(newState) {
@@ -43,13 +59,17 @@ export class GameStateManager {
     
     updateScoreUI() {
         try {
-            const p1Element = document.getElementById('p1-score');
-            const p2Element = document.getElementById('p2-score');
-            
-            if (p1Element) p1Element.textContent = `P1: ${this.scores.player1}`;
-            if (p2Element) p2Element.textContent = `P2: ${this.scores.player2}`;
+            // Use cached DOM elements for better performance
+            if (this.domElements.p1Score) {
+                this.domElements.p1Score.textContent = `P1: ${this.scores.player1}`;
+            }
+            if (this.domElements.p2Score) {
+                this.domElements.p2Score.textContent = `P2: ${this.scores.player2}`;
+            }
         } catch (error) {
             console.error('Failed to update score UI:', error);
+            // Try to re-cache if elements were lost
+            this.cacheDOMElements();
         }
     }
     
@@ -72,5 +92,11 @@ export class GameStateManager {
     
     endRound() {
         this.setState('round_end');
+    }
+    
+    destroy() {
+        // Clear DOM element references
+        this.domElements = null;
+        this.scene = null;
     }
 }

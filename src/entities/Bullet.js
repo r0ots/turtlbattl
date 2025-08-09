@@ -14,6 +14,7 @@ export class Bullet {
         this.damage = GameConfig.bullet.damage;
         this.lifespan = GameConfig.bullet.lifespan;
         this.isDestroyed = false;
+        this.isPooled = false;
         this.lastPosition = { x, y };
         
         const color = GameConfig.bullet.colors[`player${owner}`];
@@ -36,7 +37,7 @@ export class Bullet {
             }
             
             const length = Math.sqrt(dirX * dirX + dirY * dirY);
-            if (length > 0.001) {
+            if (length > GameConfig.physics.deadzone) {
                 this.velocity = {
                     x: (dirX / length) * this.speed,
                     y: (dirY / length) * this.speed
@@ -94,11 +95,72 @@ export class Bullet {
         this.sprite.setDepth(depth - 1);
     }
     
+    // Reset bullet for reuse in object pool
+    reset(x, y, dirX, dirY, owner) {
+        this.owner = owner;
+        this.isDestroyed = false;
+        this.lastPosition = { x, y };
+        
+        if (this.sprite) {
+            this.sprite.setPosition(x, y);
+            this.sprite.setVisible(true);
+            this.sprite.body.enable = true;
+            
+            // Calculate new velocity
+            const length = Math.sqrt(dirX * dirX + dirY * dirY);
+            if (length > GameConfig.physics.deadzone) {
+                this.velocity = {
+                    x: (dirX / length) * this.speed,
+                    y: (dirY / length) * this.speed
+                };
+            } else {
+                this.velocity = { x: this.speed, y: 0 };
+            }
+            
+            this.sprite.body.setVelocity(this.velocity.x, this.velocity.y);
+            this.sprite.rotation = Math.atan2(this.velocity.y, this.velocity.x);
+            
+            // Update bullet color
+            const color = GameConfig.bullet.colors[`player${owner}`];
+            this.sprite.clearTint();
+            this.sprite.setTint(color);
+            
+            // Reset lifespan timer
+            if (this.lifespanTimer) {
+                this.lifespanTimer.remove();
+            }
+            this.lifespanTimer = this.scene.time.delayedCall(this.lifespan, () => {
+                this.destroy();
+            });
+        }
+    }
+    
+    // Set bullet as inactive (for pooling)
+    setInactive() {
+        if (this.sprite) {
+            this.sprite.setVisible(false);
+            this.sprite.body.enable = false;
+            this.sprite.body.setVelocity(0, 0);
+        }
+        
+        if (this.lifespanTimer) {
+            this.lifespanTimer.remove();
+            this.lifespanTimer = null;
+        }
+    }
+    
     destroy() {
         if (this.isDestroyed) return;
         
         this.isDestroyed = true;
         
+        // If this is a pooled bullet, try to release it back to pool
+        if (this.isPooled && this.release) {
+            this.release();
+            return;
+        }
+        
+        // Otherwise destroy normally
         if (this.lifespanTimer) {
             this.lifespanTimer.remove();
             this.lifespanTimer = null;

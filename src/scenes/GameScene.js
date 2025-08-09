@@ -4,12 +4,37 @@ import { Bullet } from '../entities/Bullet';
 import { IsometricUtils } from '../utils/IsometricUtils';
 import { GameConfig } from '../config/GameConfig';
 import { GameStateManager } from '../managers/GameStateManager';
+import { EventBus } from '../events/EventBus';
+import { GameEvents } from '../events/GameEvents';
+import { CollisionSystem } from '../systems/CollisionSystem';
+import { BulletPool } from '../systems/BulletPool';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
         super({ key: 'GameScene' });
         this.players = [];
         this.bullets = [];
+        
+        // Performance tracking
+        this.lastPoolOptimization = 0;
+        this.poolOptimizationInterval = 5000; // Optimize every 5 seconds
+        
+        // Initialize systems
+        this.eventBus = new EventBus();
+        this.collisionSystem = new CollisionSystem(this);
+        this.setupEventListeners();
+    }
+    
+    setupEventListeners() {
+        // Player events
+        this.eventBus.on(GameEvents.PLAYER_DEATH, (data) => this.onPlayerDeath(data.player));
+        this.eventBus.on(GameEvents.BULLET_FIRED, (data) => this.createBullet(
+            data.position.x, 
+            data.position.y, 
+            data.direction.x, 
+            data.direction.y, 
+            data.playerNumber
+        ));
     }
     
     create() {
@@ -17,14 +42,28 @@ export default class GameScene extends Phaser.Scene {
             this.gameState = new GameStateManager(this);
             
             this.createPhysicsGroups();
+            
+            // Initialize bullet pool after physics groups are ready
+            this.bulletPool = new BulletPool(this);
+            
             this.createArena();
             this.createPlayers();
             this.setupCollisions();
             this.createUI();
             
-            this.input.gamepad.once('connected', (pad) => {
-                console.log('Gamepad connected:', pad.id);
-            });
+            // Ensure gamepad is started and ready
+            if (this.input.gamepad) {
+                this.input.gamepad.start();
+                
+                this.input.gamepad.once('connected', (pad) => {
+                    console.log('Gamepad connected:', pad.id);
+                });
+                
+                // Also check for already connected gamepads
+                this.input.gamepad.once('down', (pad, button, index) => {
+                    console.log('Gamepad input detected:', pad.id);
+                });
+            }
         } catch (error) {
             console.error('Failed to initialize game scene:', error);
         }
@@ -119,13 +158,13 @@ export default class GameScene extends Phaser.Scene {
         const centerX = GameConfig.game.width / 2;
         const textConfig = GameConfig.ui.text;
         
-        this.roundText = this.add.text(centerX, 30, '', textConfig.roundText);
+        this.roundText = this.add.text(centerX, textConfig.roundText.yPosition, '', textConfig.roundText);
         this.roundText.setOrigin(0.5, 0.5);
         this.roundText.setDepth(10000);
         
         this.controlsText = this.add.text(
             centerX,
-            GameConfig.game.height - 30,
+            GameConfig.game.height - textConfig.controlsText.yOffset,
             'Xbox Controllers Required | LS: Move | RS: Aim | RT: Shoot | RB: Dash | LT: Slash',
             textConfig.controlsText
         );
@@ -144,6 +183,12 @@ export default class GameScene extends Phaser.Scene {
                 bullet.update();
                 return !bullet.isDestroyed;
             });
+            
+            // Periodically optimize bullet pool
+            if (time - this.lastPoolOptimization > this.poolOptimizationInterval) {
+                this.bulletPool.optimizePool();
+                this.lastPoolOptimization = time;
+            }
         } catch (error) {
             console.error('Error during update:', error);
         }
@@ -151,13 +196,26 @@ export default class GameScene extends Phaser.Scene {
     
     createBullet(x, y, dirX, dirY, owner) {
         try {
-            const bullet = new Bullet(this, x, y, dirX, dirY, owner);
+            if (!this.bulletPool) {
+                console.error('BulletPool not initialized yet');
+                return;
+            }
             
-            if (bullet.sprite) {
+            if (!this.bulletGroup) {
+                console.error('BulletGroup not initialized yet');
+                return;
+            }
+            
+            // Use bullet pool for better performance
+            const bullet = this.bulletPool.getBullet(x, y, dirX, dirY, owner);
+            
+            if (bullet && bullet.sprite) {
                 this.bullets.push(bullet);
                 this.bulletGroup.add(bullet.sprite);
                 // Ensure velocity is maintained after adding to group
                 bullet.sprite.body.setVelocity(bullet.velocity.x, bullet.velocity.y);
+            } else {
+                console.error('Failed to get bullet from pool or bullet has no sprite');
             }
         } catch (error) {
             console.error('Failed to create bullet:', error);
@@ -183,11 +241,11 @@ export default class GameScene extends Phaser.Scene {
         
         this.tweens.add({
             targets: this.roundText,
-            scale: { from: 0, to: 1.5 },
-            duration: 300,
+            scale: { from: 0, to: GameConfig.effects.roundEnd.scale },
+            duration: GameConfig.effects.roundEnd.duration,
             ease: 'Back.easeOut',
             onComplete: () => {
-                this.time.delayedCall(2000, () => {
+                this.time.delayedCall(GameConfig.effects.roundEnd.delay, () => {
                     this.resetRound();
                 });
             }
@@ -196,13 +254,17 @@ export default class GameScene extends Phaser.Scene {
     
     resetRound() {
         try {
+            // Use bullet pool to efficiently clean up bullets
             this.bullets.forEach(bullet => {
                 if (bullet && !bullet.isDestroyed) {
                     bullet.destroy();
                 }
             });
             this.bullets = [];
-            this.bulletGroup.clear(true, true);
+            this.bulletGroup.clear(true, false); // Don't destroy sprites, pool will handle them
+            
+            // Release all bullets back to pool
+            this.bulletPool.releaseAllBullets();
             
             const spawn1 = GameConfig.player.spawnPositions.player1;
             const spawn2 = GameConfig.player.spawnPositions.player2;
@@ -217,5 +279,70 @@ export default class GameScene extends Phaser.Scene {
         } catch (error) {
             console.error('Error resetting round:', error);
         }
+    }
+    
+    destroy() {
+        // Clean up players
+        this.players.forEach(player => {
+            if (player) player.destroy();
+        });
+        this.players = [];
+        
+        // Clean up bullets
+        this.bullets.forEach(bullet => {
+            if (bullet && !bullet.isDestroyed) bullet.destroy();
+        });
+        this.bullets = [];
+        
+        // Clean up physics groups
+        if (this.playerGroup) {
+            this.playerGroup.destroy();
+            this.playerGroup = null;
+        }
+        
+        if (this.bulletGroup) {
+            this.bulletGroup.destroy();
+            this.bulletGroup = null;
+        }
+        
+        // Clean up game state manager
+        if (this.gameState) {
+            this.gameState.destroy();
+            this.gameState = null;
+        }
+        
+        // Clean up UI elements
+        if (this.roundText) {
+            this.roundText.destroy();
+            this.roundText = null;
+        }
+        
+        if (this.controlsText) {
+            this.controlsText.destroy();
+            this.controlsText = null;
+        }
+        
+        // Remove gamepad listeners
+        if (this.input && this.input.gamepad) {
+            this.input.gamepad.removeAllListeners();
+        }
+        
+        // Clean up systems
+        if (this.bulletPool) {
+            this.bulletPool.destroy();
+            this.bulletPool = null;
+        }
+        
+        if (this.collisionSystem) {
+            this.collisionSystem.destroy();
+            this.collisionSystem = null;
+        }
+        
+        if (this.eventBus) {
+            this.eventBus.destroy();
+            this.eventBus = null;
+        }
+        
+        super.destroy();
     }
 }
