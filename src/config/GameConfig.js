@@ -67,6 +67,15 @@ export const GameConfig = {
             offsetY: 30,
             backgroundColor: 0x333333
         },
+        ammoIndicator: {
+            bulletSize: 8,
+            bulletSpacing: 12,
+            offsetY: -45
+        },
+        reloadBar: {
+            height: 4,
+            color: 0xFFFF00
+        },
         dashIndicator: {
             offsetY: 12,
             height: 4,
@@ -136,6 +145,19 @@ export const GameConfig = {
     physics: {
         deadzone: 0.001,  // Minimum vector length
         degreesToRadians: Math.PI / 180
+    },
+    
+    pools: {
+        bullets: {
+            initial: 10,
+            max: 50,
+            optimal: 20
+        },
+        effects: {
+            initial: 5,
+            max: 30,
+            optimal: 15
+        }
     },
     
     crate: {

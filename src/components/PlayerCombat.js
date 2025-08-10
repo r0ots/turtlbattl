@@ -100,7 +100,8 @@ export class PlayerCombat {
     shoot() {
         if (this.shootCooldown > 0 || this.player.isDead || !this.scene || this.currentAmmo <= 0 || this.isReloading) return;
         
-        const shootDirection = this.player.movement.getShootDirection();
+        // Get shoot direction through event or passed parameter instead of direct access
+        const shootDirection = this.getShootDirection();
         
         try {
             // Decrement ammo
@@ -137,6 +138,15 @@ export class PlayerCombat {
             player: this.player,
             reloadTime: GameConfig.player.reloadTime
         });
+    }
+    
+    getShootDirection() {
+        // Calculate shoot direction based on sprite rotation instead of accessing movement component
+        const angle = this.sprite.rotation;
+        return {
+            x: Math.cos(angle),
+            y: Math.sin(angle)
+        };
     }
     
     melee() {

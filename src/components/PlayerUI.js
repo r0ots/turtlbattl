@@ -102,9 +102,10 @@ export class PlayerUI {
     }
     
     createAmmoIndicators() {
-        const bulletSize = 8;
-        const bulletSpacing = 12;
-        const offsetY = -45; // Above the health bar
+        const config = GameConfig.ui.ammoIndicator;
+        const bulletSize = config.bulletSize;
+        const bulletSpacing = config.bulletSpacing;
+        const offsetY = config.offsetY;
         
         // Create ammo bullets
         for (let i = 0; i < GameConfig.player.magazineSize; i++) {
@@ -120,12 +121,12 @@ export class PlayerUI {
         }
         
         // Create reload bar (hidden initially)
-        const config = GameConfig.ui.healthBar;
+        const healthConfig = GameConfig.ui.healthBar;
         this.reloadBarBg = this.scene.add.rectangle(
             this.sprite.x,
             this.sprite.y + offsetY,
-            config.width,
-            4,
+            healthConfig.width,
+            GameConfig.ui.reloadBar.height,
             0x333333
         );
         this.reloadBarBg.setOrigin(0.5, 0.5);
@@ -134,12 +135,12 @@ export class PlayerUI {
         this.reloadBar = this.scene.add.rectangle(
             this.sprite.x,
             this.sprite.y + offsetY,
-            config.width,
-            4,
-            0xFFFF00
+            healthConfig.width,
+            GameConfig.ui.reloadBar.height,
+            GameConfig.ui.reloadBar.color
         );
         this.reloadBar.setOrigin(0, 0.5);
-        this.reloadBar.x -= config.width / 2;
+        this.reloadBar.x -= healthConfig.width / 2;
         this.reloadBar.setVisible(false);
     }
     

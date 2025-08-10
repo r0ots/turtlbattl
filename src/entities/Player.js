@@ -49,16 +49,18 @@ export class Player {
             }
             
             // Set collision bounds to arena area
-            const margin = GameConfig.arena.margin;
             this.sprite.body.setCollideWorldBounds(true); // Enable world bounds collision
             this.sprite.body.setSize(GameConfig.player.collisionSize, GameConfig.player.collisionSize);
             
             this.sprite.setData('player', this);
             
-            // Initialize components after sprite is created
+            // Initialize components after sprite is created (decoupled)
             this.movement = new PlayerMovement(this);
             this.combat = new PlayerCombat(this);
             this.ui = new PlayerUI(this);
+            
+            // Setup component communication through events
+            this.setupComponentCommunication();
             
             this.gamepad = null;
             
@@ -66,6 +68,17 @@ export class Player {
             console.error('Failed to create player:', error);
             throw error;
         }
+    }
+    
+    setupComponentCommunication() {
+        // Components communicate through events, not direct references
+        this.eventBus.on('player:request_ammo', () => {
+            return this.combat ? this.combat.currentAmmo : 0;
+        });
+        
+        this.eventBus.on('player:request_reload_status', () => {
+            return this.combat ? this.combat.isReloading : false;
+        });
     }
     
     update(delta) {
@@ -314,16 +327,9 @@ export class Player {
             this.effectPool = null;
         }
         
-        // Kill all tweens first (before destroying objects)
+        // Kill tweens only for objects this class owns
         if (this.scene && this.scene.tweens) {
-            // Kill tweens for all possible targets
             if (this.sprite) this.scene.tweens.killTweensOf(this.sprite);
-            if (this.slashSprite) this.scene.tweens.killTweensOf(this.slashSprite);
-            if (this.healthBar) this.scene.tweens.killTweensOf(this.healthBar);
-            if (this.healthBarBg) this.scene.tweens.killTweensOf(this.healthBarBg);
-            if (this.dashIndicator) this.scene.tweens.killTweensOf(this.dashIndicator);
-            if (this.meleeIndicator) this.scene.tweens.killTweensOf(this.meleeIndicator);
-            if (this.directionIndicator) this.scene.tweens.killTweensOf(this.directionIndicator);
         }
         
         // Destroy components

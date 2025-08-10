@@ -2,12 +2,14 @@ import { Bullet } from '../entities/Bullet';
 import { GameConfig } from '../config/GameConfig';
 
 export class BulletPool {
-    constructor(scene, initialSize = 20) {
+    constructor(scene) {
         this.scene = scene;
         this.pool = [];
         this.activeBullets = new Set();
+        this.maxSize = GameConfig.pools?.bullets?.max || 50;
         
         // Pre-create bullets for the pool
+        const initialSize = GameConfig.pools?.bullets?.initial || 20;
         this.initializePool(initialSize);
     }
     

@@ -141,25 +141,34 @@ export class CollisionSystem {
     checkArcRectangleIntersection(attackerX, attackerY, attackerAngle, targetX, targetY) {
         const halfSize = this.playerCollisionRadius;
         
-        // Create a comprehensive grid of sample points across the rectangle
-        const sampleResolution = 6; // 6x6 = 36 sample points for better coverage
-        const step = (halfSize * 2) / sampleResolution;
+        // Check rectangle corners and center (9 strategic points)
+        const points = [
+            [targetX, targetY], // Center
+            [targetX - halfSize, targetY - halfSize], // TL
+            [targetX + halfSize, targetY - halfSize], // TR
+            [targetX + halfSize, targetY + halfSize], // BR
+            [targetX - halfSize, targetY + halfSize], // BL
+            [targetX, targetY - halfSize], // T
+            [targetX + halfSize, targetY], // R
+            [targetX, targetY + halfSize], // B
+            [targetX - halfSize, targetY] // L
+        ];
         
-        for (let i = 0; i <= sampleResolution; i++) {
-            for (let j = 0; j <= sampleResolution; j++) {
-                const sampleX = targetX - halfSize + (i * step);
-                const sampleY = targetY - halfSize + (j * step);
+        for (const [px, py] of points) {
+            const dx = px - attackerX;
+            const dy = py - attackerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance <= this.meleeRange) {
+                const angleToPoint = Math.atan2(dy, dx);
+                let angleDiff = angleToPoint - attackerAngle;
                 
-                // Check if this sample point is within the attack arc (only angle check, distance already verified)
-                if (this.isPointInArcAngleOnly(attackerX, attackerY, attackerAngle, sampleX, sampleY)) {
-                    // Double-check the distance to make sure it's actually within range
-                    const dx = sampleX - attackerX;
-                    const dy = sampleY - attackerY;
-                    const distance = Math.sqrt(dx * dx + dy * dy);
-                    
-                    if (distance <= this.meleeRange) {
-                        return { x: sampleX, y: sampleY };
-                    }
+                // Normalize angle
+                while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+                while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+                
+                if (Math.abs(angleDiff) <= this.meleeHalfArc) {
+                    return { x: px, y: py };
                 }
             }
         }
