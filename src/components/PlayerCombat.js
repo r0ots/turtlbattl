@@ -298,6 +298,9 @@ export class PlayerCombat {
         
         // Check for crate hits
         this.checkMeleeCrateHit();
+        
+        // Check for wall hits
+        this.checkMeleeWallHit();
     }
     
     checkMeleeCrateHit() {
@@ -340,6 +343,52 @@ export class PlayerCombat {
                 this.eventBus.emit(GameEvents.MELEE_HIT, {
                     attacker: this.player,
                     target: crate,
+                    damage: GameConfig.player.melee.damage
+                });
+            }
+        }
+    }
+    
+    checkMeleeWallHit() {
+        if (!this.scene.walls) return;
+        
+        const meleeRange = GameConfig.player.melee.range;
+        const meleeArc = GameConfig.player.melee.arc * GameConfig.physics.degreesToRadians;
+        const playerX = this.sprite.x;
+        const playerY = this.sprite.y;
+        const playerAngle = this.sprite.rotation;
+        
+        for (const wall of this.scene.walls) {
+            if (!wall || wall.isDestroyed) continue;
+            
+            // Skip if we've already hit this wall during this slash
+            const wallId = wall.id || wall.sprite?.name || `${wall.x}_${wall.y}`;
+            if (this.hitTargetsThisSlash.has(wallId)) continue;
+            
+            const dx = wall.x - playerX;
+            const dy = wall.y - playerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Check if wall is in range (walls are larger so use larger collision radius)
+            if (distance > meleeRange + GameConfig.wall.width / 2) continue;
+            
+            // Check if wall is in arc
+            const angleToTarget = Math.atan2(dy, dx);
+            let angleDiff = angleToTarget - playerAngle;
+            
+            // Normalize angle difference
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+            
+            if (Math.abs(angleDiff) <= meleeArc / 2) {
+                // Hit the wall!
+                this.hitTargetsThisSlash.add(wallId); // Mark as hit this slash
+                wall.takeDamage(GameConfig.player.melee.damage);
+                
+                // Emit hit event for sound
+                this.eventBus.emit(GameEvents.MELEE_HIT, {
+                    attacker: this.player,
+                    target: wall,
                     damage: GameConfig.player.melee.damage
                 });
             }

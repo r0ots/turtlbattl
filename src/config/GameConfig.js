@@ -175,5 +175,15 @@ export const GameConfig = {
         maxCrates: 8,         // Maximum number of crates
         spawnMargin: 100,     // Margin from arena edges
         minDistanceFromPlayer: 150  // Minimum distance from player spawn points
+    },
+    
+    wall: {
+        health: 5000,         // 100x more HP than crates (takes ~200 bullet hits)
+        width: 50,            // Width of wall segments
+        height: 50,           // Height of wall segments
+        minWalls: 2,          // Minimum number of wall arrangements
+        maxWalls: 5,          // Maximum number of wall arrangements
+        spawnMargin: 100,     // Margin from arena edges
+        minDistanceFromPlayer: 200  // Minimum distance from player spawn points
     }
 };

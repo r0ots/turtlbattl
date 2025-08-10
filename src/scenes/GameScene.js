@@ -2,6 +2,7 @@ import Phaser from 'phaser';
 import { Player } from '../entities/Player';
 import { Bullet } from '../entities/Bullet';
 import { Crate } from '../entities/Crate';
+import { Wall } from '../entities/Wall';
 import { IsometricUtils } from '../utils/IsometricUtils';
 import { GameConfig } from '../config/GameConfig';
 import { GameStateManager } from '../managers/GameStateManager';
@@ -19,6 +20,7 @@ export default class GameScene extends Phaser.Scene {
         this.players = [];
         this.bullets = [];
         this.crates = [];
+        this.walls = [];
         
         // Performance tracking
         this.lastPoolOptimization = 0;
@@ -73,6 +75,10 @@ export default class GameScene extends Phaser.Scene {
         
         // Load crate image
         this.load.image('crate', '/pictures/crate.png');
+        
+        // Load wall images
+        this.load.image('wall_h', '/pictures/wall_h.png');
+        this.load.image('wall_v', '/pictures/wall_v.png');
     }
     
     create() {
@@ -93,6 +99,7 @@ export default class GameScene extends Phaser.Scene {
             this.createArena();
             this.createPlayers();
             this.createCrates();
+            this.createWalls();
             this.setupCollisions();
             this.createUI();
             
@@ -123,6 +130,7 @@ export default class GameScene extends Phaser.Scene {
             runChildUpdate: true
         });
         this.crateGroup = this.physics.add.staticGroup();
+        this.wallGroup = this.physics.add.staticGroup();
     }
     
     createArena() {
@@ -338,12 +346,170 @@ export default class GameScene extends Phaser.Scene {
         }
     }
     
+    createWalls() {
+        try {
+            const config = GameConfig.wall;
+            const width = this.cameras.main.width;
+            const height = this.cameras.main.height;
+            const gridSize = GameConfig.arena.gridSize;
+            const margin = GameConfig.arena.margin;
+            
+            // Define wall arrangement patterns
+            const patterns = [
+                // Single walls
+                { name: 'single_h', blocks: [{x: 0, y: 0, orientation: 'horizontal'}] },
+                { name: 'single_v', blocks: [{x: 0, y: 0, orientation: 'vertical'}] },
+                
+                // Long horizontal walls (2-10 segments)
+                { name: 'wall_h_2', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}] },
+                { name: 'wall_h_3', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}] },
+                { name: 'wall_h_4', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}] },
+                { name: 'wall_h_5', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}] },
+                { name: 'wall_h_6', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 5, y: 0, orientation: 'horizontal'}] },
+                { name: 'wall_h_7', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 5, y: 0, orientation: 'horizontal'}, {x: 6, y: 0, orientation: 'horizontal'}] },
+                { name: 'wall_h_8', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 5, y: 0, orientation: 'horizontal'}, {x: 6, y: 0, orientation: 'horizontal'}, {x: 7, y: 0, orientation: 'horizontal'}] },
+                { name: 'wall_h_10', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 5, y: 0, orientation: 'horizontal'}, {x: 6, y: 0, orientation: 'horizontal'}, {x: 7, y: 0, orientation: 'horizontal'}, {x: 8, y: 0, orientation: 'horizontal'}, {x: 9, y: 0, orientation: 'horizontal'}] },
+                
+                // Long vertical walls (2-10 segments)
+                { name: 'wall_v_2', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}] },
+                { name: 'wall_v_3', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}] },
+                { name: 'wall_v_4', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}] },
+                { name: 'wall_v_5', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}] },
+                { name: 'wall_v_6', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}, {x: 0, y: 5, orientation: 'vertical'}] },
+                { name: 'wall_v_7', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}, {x: 0, y: 5, orientation: 'vertical'}, {x: 0, y: 6, orientation: 'vertical'}] },
+                { name: 'wall_v_8', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}, {x: 0, y: 5, orientation: 'vertical'}, {x: 0, y: 6, orientation: 'vertical'}, {x: 0, y: 7, orientation: 'vertical'}] },
+                { name: 'wall_v_10', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}, {x: 0, y: 5, orientation: 'vertical'}, {x: 0, y: 6, orientation: 'vertical'}, {x: 0, y: 7, orientation: 'vertical'}, {x: 0, y: 8, orientation: 'vertical'}, {x: 0, y: 9, orientation: 'vertical'}] },
+                
+                // Parallel walls (creating corridors)
+                { name: 'corridor_h_3', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 0, y: 2, orientation: 'horizontal'}, {x: 1, y: 2, orientation: 'horizontal'}, {x: 2, y: 2, orientation: 'horizontal'}] },
+                { name: 'corridor_v_3', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 2, y: 0, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}, {x: 2, y: 2, orientation: 'vertical'}] },
+                { name: 'corridor_h_5', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 0, y: 2, orientation: 'horizontal'}, {x: 1, y: 2, orientation: 'horizontal'}, {x: 2, y: 2, orientation: 'horizontal'}, {x: 3, y: 2, orientation: 'horizontal'}, {x: 4, y: 2, orientation: 'horizontal'}] },
+                { name: 'corridor_v_5', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}, {x: 2, y: 0, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}, {x: 2, y: 2, orientation: 'vertical'}, {x: 2, y: 3, orientation: 'vertical'}, {x: 2, y: 4, orientation: 'vertical'}] },
+                
+                // L-shapes (no overlapping corners)
+                { name: 'L_small_br', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}] },
+                { name: 'L_small_bl', blocks: [{x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}] },
+                { name: 'L_small_tr', blocks: [{x: 0, y: 1, orientation: 'horizontal'}, {x: 1, y: 1, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}] },
+                { name: 'L_small_tl', blocks: [{x: 1, y: 1, orientation: 'horizontal'}, {x: 2, y: 1, orientation: 'horizontal'}, {x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}] },
+                
+                // Large L-shapes
+                { name: 'L_large_br', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'vertical'}, {x: 4, y: 1, orientation: 'vertical'}, {x: 4, y: 2, orientation: 'vertical'}, {x: 4, y: 3, orientation: 'vertical'}] },
+                { name: 'L_large_bl', blocks: [{x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}] },
+                
+                // Rooms (no overlapping corners)
+                { name: 'room_small', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 0, y: 2, orientation: 'horizontal'}, {x: 1, y: 2, orientation: 'horizontal'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}] },
+                { name: 'room_medium', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 0, y: 3, orientation: 'horizontal'}, {x: 1, y: 3, orientation: 'horizontal'}, {x: 2, y: 3, orientation: 'horizontal'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 3, y: 1, orientation: 'vertical'}, {x: 3, y: 2, orientation: 'vertical'}] },
+                
+                // T-shapes
+                { name: 'T_up', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 1, y: 1, orientation: 'vertical'}, {x: 1, y: 2, orientation: 'vertical'}] },
+                { name: 'T_down', blocks: [{x: 1, y: 0, orientation: 'vertical'}, {x: 1, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'horizontal'}, {x: 1, y: 2, orientation: 'horizontal'}, {x: 2, y: 2, orientation: 'horizontal'}] },
+                { name: 'T_left', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 1, y: 1, orientation: 'horizontal'}, {x: 2, y: 1, orientation: 'horizontal'}] },
+                { name: 'T_right', blocks: [{x: 2, y: 0, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}, {x: 2, y: 2, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'horizontal'}, {x: 1, y: 1, orientation: 'horizontal'}] }
+            ];
+            
+            // Calculate grid positions
+            const gridCols = Math.floor((width - margin * 2) / gridSize);
+            const gridRows = Math.floor((height - margin * 2) / gridSize);
+            
+            // Track occupied grid positions (shared with crates to avoid overlap)
+            const occupiedGrid = new Set();
+            
+            // Mark crate positions as occupied
+            for (const crate of this.crates) {
+                const crateGridX = Math.floor((crate.x - margin) / gridSize);
+                const crateGridY = Math.floor((crate.y - margin) / gridSize);
+                occupiedGrid.add(`${crateGridX},${crateGridY}`);
+            }
+            
+            // Player spawn grid positions to avoid
+            const playerGridPositions = [
+                { x: Math.floor(gridCols * 0.25), y: Math.floor(gridRows * 0.5) },
+                { x: Math.floor(gridCols * 0.75), y: Math.floor(gridRows * 0.5) }
+            ];
+            
+            // Mark player spawn areas as occupied (larger area for walls)
+            for (const playerPos of playerGridPositions) {
+                for (let dx = -4; dx <= 4; dx++) {
+                    for (let dy = -4; dy <= 4; dy++) {
+                        occupiedGrid.add(`${playerPos.x + dx},${playerPos.y + dy}`);
+                    }
+                }
+            }
+            
+            // Random number of wall arrangements to place
+            const arrangementCount = Math.floor(Math.random() * (config.maxWalls - config.minWalls + 1)) + config.minWalls;
+            
+            for (let i = 0; i < arrangementCount; i++) {
+                // Pick random pattern
+                const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+                
+                // Try to find valid position for this pattern
+                let placed = false;
+                let attempts = 0;
+                
+                while (!placed && attempts < 50) {
+                    // Random grid position
+                    const gridX = Math.floor(Math.random() * (gridCols - 4)) + 2;
+                    const gridY = Math.floor(Math.random() * (gridRows - 4)) + 2;
+                    
+                    // Check if all blocks in pattern can be placed
+                    let canPlace = true;
+                    for (const block of pattern.blocks) {
+                        const checkX = gridX + block.x;
+                        const checkY = gridY + block.y;
+                        // Include orientation in key to prevent overlapping walls
+                        const key = `${checkX},${checkY},${block.orientation}`;
+                        
+                        if (occupiedGrid.has(key) || checkX >= gridCols || checkY >= gridRows) {
+                            canPlace = false;
+                            break;
+                        }
+                    }
+                    
+                    if (canPlace) {
+                        // Place all walls in the pattern
+                        for (const block of pattern.blocks) {
+                            const wallGridX = gridX + block.x;
+                            const wallGridY = gridY + block.y;
+                            
+                            // Convert grid position to world position
+                            const worldX = margin + wallGridX * gridSize + gridSize/2;
+                            const worldY = margin + wallGridY * gridSize + gridSize/2;
+                            
+                            // Create wall
+                            const wall = new Wall(this, worldX, worldY, block.orientation);
+                            this.walls.push(wall);
+                            
+                            // Add to physics group
+                            this.wallGroup.add(wall.sprite, true);
+                            wall.sprite.body.setSize(config.width, config.height);
+                            
+                            // Mark grid position as occupied (with orientation)
+                            occupiedGrid.add(`${wallGridX},${wallGridY},${block.orientation}`);
+                        }
+                        
+                        placed = true;
+                    }
+                    
+                    attempts++;
+                }
+            }
+            
+            console.log(`Created ${this.walls.length} walls in ${arrangementCount} arrangements`);
+        } catch (error) {
+            console.error('Failed to create walls:', error);
+        }
+    }
+    
     setupCollisions() {
         // Player-player collisions
         this.physics.add.collider(this.playerGroup, this.playerGroup);
         
         // Player-crate collisions (blocks movement)
         this.physics.add.collider(this.playerGroup, this.crateGroup);
+        
+        // Player-wall collisions (blocks movement)
+        this.physics.add.collider(this.playerGroup, this.wallGroup);
         
         // Bullet-player collisions
         this.physics.add.overlap(
@@ -359,6 +525,15 @@ export default class GameScene extends Phaser.Scene {
             this.bulletGroup,
             this.crateGroup,
             this.handleBulletCrateHit,
+            null,
+            this
+        );
+        
+        // Bullet-wall collisions
+        this.physics.add.overlap(
+            this.bulletGroup,
+            this.wallGroup,
+            this.handleBulletWallHit,
             null,
             this
         );
@@ -485,6 +660,56 @@ export default class GameScene extends Phaser.Scene {
             }
         } catch (error) {
             console.error('Error handling bullet-crate collision:', error);
+        }
+    }
+    
+    handleBulletWallHit(bulletSprite, wallSprite) {
+        try {
+            const bullet = bulletSprite.getData('bullet');
+            const wall = wallSprite.getData('wall');
+            
+            if (!bullet || !wall || bullet.isDestroyed || wall.isDestroyed) return;
+            
+            // Check if piercing bullet has already hit this wall
+            if (bullet.hasHitTarget(wall)) {
+                return; // Skip if already hit this wall
+            }
+            
+            // Damage wall
+            wall.takeDamage(bullet.damage);
+            
+            // Check for explosion before destroying bullet
+            const hasExplosive = bullet.stats && bullet.stats.explosive > 0;
+            if (hasExplosive) {
+                const explosionLevel = bullet.stats.explosive;
+                const baseRadius = GameConfig.explosion.radius;
+                const baseDamage = GameConfig.explosion.damage;
+                
+                // Scale explosion with stack level
+                const scaledRadius = baseRadius * (1 + (explosionLevel - 1) * 0.2);
+                const scaledDamage = baseDamage * (1 + (explosionLevel - 1) * 0.3);
+                
+                this.explosionSystem.createExplosion(
+                    bulletSprite.x, 
+                    bulletSprite.y, 
+                    scaledDamage,
+                    bullet.owner,
+                    scaledRadius
+                );
+            }
+            
+            // Mark target as hit and check if bullet should be destroyed
+            bullet.markTargetAsHit(wall);
+            if (bullet.shouldDestroyAfterHit()) {
+                bullet.destroy();
+                
+                const bulletIndex = this.bullets.indexOf(bullet);
+                if (bulletIndex > -1) {
+                    this.bullets.splice(bulletIndex, 1);
+                }
+            }
+        } catch (error) {
+            console.error('Error handling bullet-wall collision:', error);
         }
     }
     
@@ -699,6 +924,16 @@ export default class GameScene extends Phaser.Scene {
             this.crates = [];
             this.crateGroup.clear(true, true);
             this.createCrates();
+            
+            // Clear and recreate walls
+            this.walls.forEach(wall => {
+                if (wall && !wall.isDestroyed) {
+                    wall.destroy();
+                }
+            });
+            this.walls = [];
+            this.wallGroup.clear(true, true);
+            this.createWalls();
             
             const width = this.cameras.main.width;
             const height = this.cameras.main.height;
