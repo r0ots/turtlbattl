@@ -103,9 +103,13 @@ export class PlayerMovement {
         const margin = GameConfig.arena.margin;
         const halfSize = GameConfig.player.collisionSize / 2;
         
+        // Get actual screen dimensions from the scene
+        const width = this.scene.cameras.main.width;
+        const height = this.scene.cameras.main.height;
+        
         // Constrain X position
         const minX = margin + halfSize;
-        const maxX = GameConfig.game.width - margin - halfSize;
+        const maxX = width - margin - halfSize;
         
         if (this.sprite.x < minX) {
             this.sprite.x = minX;
@@ -117,7 +121,7 @@ export class PlayerMovement {
         
         // Constrain Y position
         const minY = margin + halfSize;
-        const maxY = GameConfig.game.height - margin - halfSize;
+        const maxY = height - margin - halfSize;
         
         if (this.sprite.y < minY) {
             this.sprite.y = minY;

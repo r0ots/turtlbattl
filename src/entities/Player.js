@@ -50,7 +50,7 @@ export class Player {
             
             // Set collision bounds to arena area
             const margin = GameConfig.arena.margin;
-            this.sprite.body.setCollideWorldBounds(false); // Disable default world bounds
+            this.sprite.body.setCollideWorldBounds(true); // Enable world bounds collision
             this.sprite.body.setSize(GameConfig.player.collisionSize, GameConfig.player.collisionSize);
             
             this.sprite.setData('player', this);

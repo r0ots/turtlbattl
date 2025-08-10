@@ -62,6 +62,12 @@ export default class GameScene extends Phaser.Scene {
         try {
             this.gameState = new GameStateManager(this);
             
+            // Set world bounds to match the arena (with margins)
+            const width = this.cameras.main.width;
+            const height = this.cameras.main.height;
+            const margin = GameConfig.arena.margin;
+            this.physics.world.setBounds(margin, margin, width - margin * 2, height - margin * 2);
+            
             this.createPhysicsGroups();
             
             // Initialize bullet pool after physics groups are ready
@@ -102,31 +108,43 @@ export default class GameScene extends Phaser.Scene {
     createArena() {
         const graphics = this.add.graphics();
         const config = GameConfig.arena;
+        const width = this.cameras.main.width;
+        const height = this.cameras.main.height;
         
         graphics.lineStyle(3, config.borderColor, 1);
         graphics.strokeRect(
             config.margin,
             config.margin,
-            GameConfig.game.width - config.margin * 2,
-            GameConfig.game.height - config.margin * 2
+            width - config.margin * 2,
+            height - config.margin * 2
         );
         
         graphics.lineStyle(1, config.gridColor, 0.3);
-        for (let x = config.margin; x < GameConfig.game.width - config.margin; x += config.gridSize) {
+        for (let x = config.margin; x < width - config.margin; x += config.gridSize) {
             graphics.moveTo(x, config.margin);
-            graphics.lineTo(x, GameConfig.game.height - config.margin);
+            graphics.lineTo(x, height - config.margin);
         }
-        for (let y = config.margin; y < GameConfig.game.height - config.margin; y += config.gridSize) {
+        for (let y = config.margin; y < height - config.margin; y += config.gridSize) {
             graphics.moveTo(config.margin, y);
-            graphics.lineTo(GameConfig.game.width - config.margin, y);
+            graphics.lineTo(width - config.margin, y);
         }
         graphics.strokePath();
     }
     
     createPlayers() {
         try {
-            const spawn1 = GameConfig.player.spawnPositions.player1;
-            const spawn2 = GameConfig.player.spawnPositions.player2;
+            const width = this.cameras.main.width;
+            const height = this.cameras.main.height;
+            
+            // Dynamic spawn positions based on screen size
+            const spawn1 = { 
+                x: width * 0.25, 
+                y: height * 0.5 
+            };
+            const spawn2 = { 
+                x: width * 0.75, 
+                y: height * 0.5 
+            };
             
             const player1 = new Player(this, spawn1.x, spawn1.y, 1);
             const player2 = new Player(this, spawn2.x, spawn2.y, 2);
@@ -143,16 +161,18 @@ export default class GameScene extends Phaser.Scene {
     createCrates() {
         try {
             const config = GameConfig.crate;
-            const arenaWidth = GameConfig.game.width - (GameConfig.arena.margin * 2);
-            const arenaHeight = GameConfig.game.height - (GameConfig.arena.margin * 2);
+            const width = this.cameras.main.width;
+            const height = this.cameras.main.height;
+            const arenaWidth = width - (GameConfig.arena.margin * 2);
+            const arenaHeight = height - (GameConfig.arena.margin * 2);
             
             // Random number of crates
             const crateCount = Math.floor(Math.random() * (config.maxCrates - config.minCrates + 1)) + config.minCrates;
             
-            // Player spawn positions to avoid
+            // Player spawn positions to avoid (use dynamic positions)
             const playerSpawns = [
-                GameConfig.player.spawnPositions.player1,
-                GameConfig.player.spawnPositions.player2
+                { x: width * 0.25, y: height * 0.5 },
+                { x: width * 0.75, y: height * 0.5 }
             ];
             
             for (let i = 0; i < crateCount; i++) {
@@ -292,7 +312,7 @@ export default class GameScene extends Phaser.Scene {
     }
     
     createUI() {
-        const centerX = GameConfig.game.width / 2;
+        const centerX = this.cameras.main.width / 2;
         const textConfig = GameConfig.ui.text;
         
         this.roundText = this.add.text(centerX, textConfig.roundText.yPosition, '', textConfig.roundText);
@@ -301,8 +321,8 @@ export default class GameScene extends Phaser.Scene {
         
         this.controlsText = this.add.text(
             centerX,
-            GameConfig.game.height - textConfig.controlsText.yOffset,
-            'Xbox Controllers Required | LS: Move | RS: Aim | RT: Shoot | RB: Dash | LT: Slash',
+            this.cameras.main.height - textConfig.controlsText.yOffset,
+            'Xbox Controllers Required | LS: Move | RS: Aim | RT: Shoot | RB: Dash | LT: Slash | X: Reload',
             textConfig.controlsText
         );
         this.controlsText.setOrigin(0.5, 0.5);
@@ -413,11 +433,11 @@ export default class GameScene extends Phaser.Scene {
             this.crateGroup.clear(true, true);
             this.createCrates();
             
-            const spawn1 = GameConfig.player.spawnPositions.player1;
-            const spawn2 = GameConfig.player.spawnPositions.player2;
+            const width = this.cameras.main.width;
+            const height = this.cameras.main.height;
             
-            this.players[0].respawn(spawn1.x, spawn1.y);
-            this.players[1].respawn(spawn2.x, spawn2.y);
+            this.players[0].respawn(width * 0.25, height * 0.5);
+            this.players[1].respawn(width * 0.75, height * 0.5);
             
             this.roundText.setText('');
             this.roundText.setScale(1);
