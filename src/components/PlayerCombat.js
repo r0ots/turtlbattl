@@ -17,6 +17,7 @@ export class PlayerCombat {
         this.meleeCooldown = 0;
         this.slashTime = 0;
         this.slashSprite = null;
+        this.hitTargetsThisSlash = new Set(); // Track what we've hit this slash
         
         // Ammo state (use stats if available)
         const stats = this.player.stats;
@@ -185,6 +186,7 @@ export class PlayerCombat {
         this.isSlashing = true;
         this.slashTime = GameConfig.player.melee.duration;
         this.meleeCooldown = GameConfig.player.melee.cooldown;
+        this.hitTargetsThisSlash.clear(); // Reset hit tracking for new slash
         
         // Emit melee attack event
         this.eventBus.emit(GameEvents.MELEE_ATTACK, {
@@ -197,10 +199,7 @@ export class PlayerCombat {
         // Create slash visual
         this.createSlashEffect();
         
-        // Check for hit on other player
-        this.checkMeleeHit();
-        
-        // Check for bullet reflection
+        // Check for bullet reflection (only once at start)
         this.checkBulletReflection();
     }
     
@@ -208,6 +207,9 @@ export class PlayerCombat {
         if (!this.isSlashing) return;
         
         this.slashTime -= delta;
+        
+        // Continuously check for hits during the entire slash duration
+        this.checkMeleeHit();
         
         if (this.slashTime <= 0) {
             this.isSlashing = false;
@@ -310,6 +312,10 @@ export class PlayerCombat {
         for (const crate of this.scene.crates) {
             if (!crate || crate.isDestroyed) continue;
             
+            // Skip if we've already hit this crate during this slash
+            const crateId = crate.id || crate.sprite?.name || `${crate.x}_${crate.y}`;
+            if (this.hitTargetsThisSlash.has(crateId)) continue;
+            
             const dx = crate.x - playerX;
             const dy = crate.y - playerY;
             const distance = Math.sqrt(dx * dx + dy * dy);
@@ -327,6 +333,7 @@ export class PlayerCombat {
             
             if (Math.abs(angleDiff) <= meleeArc / 2) {
                 // Hit the crate!
+                this.hitTargetsThisSlash.add(crateId); // Mark as hit this slash
                 crate.takeDamage(GameConfig.player.melee.damage);
                 
                 // Emit hit event for sound
