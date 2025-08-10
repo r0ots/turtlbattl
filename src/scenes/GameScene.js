@@ -264,8 +264,9 @@ export default class GameScene extends Phaser.Scene {
             const gridCols = Math.floor((width - margin * 2) / gridSize);
             const gridRows = Math.floor((height - margin * 2) / gridSize);
             
-            // Track occupied grid positions
+            // Track occupied grid positions (shared with walls)
             const occupiedGrid = new Set();
+            this.globalOccupiedGrid = occupiedGrid; // Store for wall creation
             
             // Player spawn grid positions to avoid
             const playerGridPositions = [
@@ -282,12 +283,33 @@ export default class GameScene extends Phaser.Scene {
                 }
             }
             
-            // Random number of arrangements to place
-            const arrangementCount = Math.floor(Math.random() * 5) + 3; // 3-7 arrangements
+            // Keep spawning arrangements until we have enough crate tiles
+            let totalCrateTiles = 0;
+            const targetMinTiles = GameConfig.crate.minTiles;
+            const targetMaxTiles = GameConfig.crate.maxTiles;
+            let arrangementCount = 0;
+            const maxArrangements = 50; // Safety limit
             
-            for (let i = 0; i < arrangementCount; i++) {
-                // Pick random pattern
-                const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+            while (totalCrateTiles < targetMinTiles && arrangementCount < maxArrangements) {
+                // Pick random pattern, prefer larger patterns if we need more tiles
+                let pattern;
+                if (totalCrateTiles < targetMinTiles) {
+                    // When we need more tiles, bias towards larger patterns
+                    const largePatterns = patterns.filter(p => p.blocks.length >= 4);
+                    const allPatterns = patterns;
+                    const patternPool = totalCrateTiles < targetMinTiles / 2 ? largePatterns.concat(allPatterns) : allPatterns;
+                    pattern = patternPool[Math.floor(Math.random() * patternPool.length)];
+                } else {
+                    pattern = patterns[Math.floor(Math.random() * patterns.length)];
+                }
+                
+                // Skip if this would exceed max tiles
+                if (totalCrateTiles + pattern.blocks.length > targetMaxTiles) {
+                    // Try to find a smaller pattern that fits
+                    const fittingPatterns = patterns.filter(p => totalCrateTiles + p.blocks.length <= targetMaxTiles);
+                    if (fittingPatterns.length === 0) break; // No patterns fit
+                    pattern = fittingPatterns[Math.floor(Math.random() * fittingPatterns.length)];
+                }
                 
                 // Try to find valid position for this pattern
                 let placed = false;
@@ -334,13 +356,15 @@ export default class GameScene extends Phaser.Scene {
                         }
                         
                         placed = true;
+                        totalCrateTiles += pattern.blocks.length;
+                        arrangementCount++;
                     }
                     
                     attempts++;
                 }
             }
             
-            console.log(`Created ${this.crates.length} crates in ${arrangementCount} arrangements`);
+            console.log(`Created ${totalCrateTiles} crate tiles in ${arrangementCount} arrangements (target: ${targetMinTiles}-${targetMaxTiles})`);
         } catch (error) {
             console.error('Failed to create crates:', error);
         }
@@ -411,14 +435,17 @@ export default class GameScene extends Phaser.Scene {
             const gridCols = Math.floor((width - margin * 2) / gridSize);
             const gridRows = Math.floor((height - margin * 2) / gridSize);
             
-            // Track occupied grid positions (shared with crates to avoid overlap)
-            const occupiedGrid = new Set();
+            // Use the same occupied grid from crate creation to prevent overlap
+            const occupiedGrid = this.globalOccupiedGrid || new Set();
             
-            // Mark crate positions as occupied
-            for (const crate of this.crates) {
-                const crateGridX = Math.floor((crate.x - margin) / gridSize);
-                const crateGridY = Math.floor((crate.y - margin) / gridSize);
-                occupiedGrid.add(`${crateGridX},${crateGridY}`);
+            // If this is the first time, mark crate positions as occupied
+            if (!this.globalOccupiedGrid) {
+                for (const crate of this.crates) {
+                    const crateGridX = Math.floor((crate.x - margin) / gridSize);
+                    const crateGridY = Math.floor((crate.y - margin) / gridSize);
+                    occupiedGrid.add(`${crateGridX},${crateGridY}`);
+                }
+                this.globalOccupiedGrid = occupiedGrid;
             }
             
             // Player spawn grid positions to avoid
@@ -436,12 +463,33 @@ export default class GameScene extends Phaser.Scene {
                 }
             }
             
-            // Random number of wall arrangements to place
-            const arrangementCount = Math.floor(Math.random() * (config.maxWalls - config.minWalls + 1)) + config.minWalls;
+            // Keep spawning arrangements until we have enough wall tiles
+            let totalWallTiles = 0;
+            const targetMinTiles = config.minTiles;
+            const targetMaxTiles = config.maxTiles;
+            let arrangementCount = 0;
+            const maxArrangements = 50; // Safety limit
             
-            for (let i = 0; i < arrangementCount; i++) {
-                // Pick random pattern
-                const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+            while (totalWallTiles < targetMinTiles && arrangementCount < maxArrangements) {
+                // Pick random pattern, prefer larger patterns if we need more tiles
+                let pattern;
+                if (totalWallTiles < targetMinTiles) {
+                    // When we need more tiles, bias towards larger patterns
+                    const largePatterns = patterns.filter(p => p.blocks.length >= 5);
+                    const allPatterns = patterns;
+                    const patternPool = totalWallTiles < targetMinTiles / 2 ? largePatterns.concat(allPatterns) : allPatterns;
+                    pattern = patternPool[Math.floor(Math.random() * patternPool.length)];
+                } else {
+                    pattern = patterns[Math.floor(Math.random() * patterns.length)];
+                }
+                
+                // Skip if this would exceed max tiles
+                if (totalWallTiles + pattern.blocks.length > targetMaxTiles) {
+                    // Try to find a smaller pattern that fits
+                    const fittingPatterns = patterns.filter(p => totalWallTiles + p.blocks.length <= targetMaxTiles);
+                    if (fittingPatterns.length === 0) break; // No patterns fit
+                    pattern = fittingPatterns[Math.floor(Math.random() * fittingPatterns.length)];
+                }
                 
                 // Try to find valid position for this pattern
                 let placed = false;
@@ -457,10 +505,11 @@ export default class GameScene extends Phaser.Scene {
                     for (const block of pattern.blocks) {
                         const checkX = gridX + block.x;
                         const checkY = gridY + block.y;
-                        // Include orientation in key to prevent overlapping walls
-                        const key = `${checkX},${checkY},${block.orientation}`;
+                        // Check both wall-specific key and general position key
+                        const wallKey = `${checkX},${checkY},${block.orientation}`;
+                        const generalKey = `${checkX},${checkY}`;
                         
-                        if (occupiedGrid.has(key) || checkX >= gridCols || checkY >= gridRows) {
+                        if (occupiedGrid.has(wallKey) || occupiedGrid.has(generalKey) || checkX >= gridCols || checkY >= gridRows) {
                             canPlace = false;
                             break;
                         }
@@ -482,20 +531,34 @@ export default class GameScene extends Phaser.Scene {
                             
                             // Add to physics group
                             this.wallGroup.add(wall.sprite, true);
-                            wall.sprite.body.setSize(config.width, config.height);
                             
-                            // Mark grid position as occupied (with orientation)
-                            occupiedGrid.add(`${wallGridX},${wallGridY},${block.orientation}`);
+                            // Set collision size based on orientation
+                            if (block.orientation === 'horizontal') {
+                                // Horizontal walls: full width and height
+                                wall.sprite.body.setSize(config.width, config.height);
+                            } else {
+                                // Vertical walls: only the right half of the grid cell
+                                const halfWidth = config.width / 2;
+                                wall.sprite.body.setSize(halfWidth, config.height);
+                                // Offset the collision body to the right half
+                                wall.sprite.body.setOffset(halfWidth, 0);
+                            }
+                            
+                            // Mark grid position as occupied (with orientation for walls, and basic position for crate overlap prevention)
+                            occupiedGrid.add(`${wallGridX},${wallGridY},${block.orientation}`); // Specific to wall orientation
+                            occupiedGrid.add(`${wallGridX},${wallGridY}`); // General position to prevent crate overlap
                         }
                         
                         placed = true;
+                        totalWallTiles += pattern.blocks.length;
+                        arrangementCount++;
                     }
                     
                     attempts++;
                 }
             }
             
-            console.log(`Created ${this.walls.length} walls in ${arrangementCount} arrangements`);
+            console.log(`Created ${totalWallTiles} wall tiles in ${arrangementCount} arrangements (target: ${targetMinTiles}-${targetMaxTiles})`);
         } catch (error) {
             console.error('Failed to create walls:', error);
         }
@@ -914,6 +977,9 @@ export default class GameScene extends Phaser.Scene {
             
             // Release all bullets back to pool
             this.bulletPool.releaseAllBullets();
+            
+            // Reset global occupied grid
+            this.globalOccupiedGrid = null;
             
             // Clear and recreate crates
             this.crates.forEach(crate => {
