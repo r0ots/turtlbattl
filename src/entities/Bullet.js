@@ -18,6 +18,8 @@ export class Bullet {
         this.isDestroyed = false;
         this.isPooled = false;
         this.lastPosition = { x, y };
+        this.hitTargets = new Set(); // Track hit targets to prevent multiple hits
+        this.maxPierceTargets = stats && stats.piercing > 0 ? stats.piercing : 0;
         
         const color = GameConfig.bullet.colors[`player${owner}`];
         
@@ -107,6 +109,8 @@ export class Bullet {
         this.bulletSize = stats ? stats.bulletSize : GameConfig.bullet.size;
         this.isDestroyed = false;
         this.lastPosition = { x, y };
+        this.hitTargets.clear(); // Reset hit targets for reuse
+        this.maxPierceTargets = stats && stats.piercing > 0 ? stats.piercing : 0;
         
         if (this.sprite) {
             this.sprite.setPosition(x, y);
@@ -144,6 +148,23 @@ export class Bullet {
                 this.destroy();
             });
         }
+    }
+    
+    // Check if target has already been hit (for piercing bullets)
+    hasHitTarget(target) {
+        const targetId = target.playerNumber || target.id || target.sprite?.name || target.sprite?.id || target;
+        return this.hitTargets.has(targetId);
+    }
+    
+    // Mark target as hit (for piercing bullets)
+    markTargetAsHit(target) {
+        const targetId = target.playerNumber || target.id || target.sprite?.name || target.sprite?.id || target;
+        this.hitTargets.add(targetId);
+    }
+    
+    // Check if bullet should be destroyed after hitting target count
+    shouldDestroyAfterHit() {
+        return this.maxPierceTargets === 0 || this.hitTargets.size >= this.maxPierceTargets;
     }
     
     // Set bullet as inactive (for pooling)

@@ -282,6 +282,11 @@ export default class GameScene extends Phaser.Scene {
             
             if (!bullet || !player || bullet.isDestroyed || player.isDead) return;
             
+            // Check if piercing bullet has already hit this target
+            if (bullet.hasHitTarget(player)) {
+                return; // Skip if already hit this player
+            }
+            
             if (bullet.owner !== player.playerNumber) {
                 // Apply vampirism if the bullet owner has it
                 const ownerStats = this.playerStats[bullet.owner - 1];
@@ -305,19 +310,28 @@ export default class GameScene extends Phaser.Scene {
                 });
                 
                 // Check for explosion before destroying bullet
-                const hasExplosive = bullet.stats && bullet.stats.explosive;
+                const hasExplosive = bullet.stats && bullet.stats.explosive > 0;
                 if (hasExplosive) {
+                    const explosionLevel = bullet.stats.explosive;
+                    const baseRadius = GameConfig.explosion.radius;
+                    const baseDamage = GameConfig.explosion.damage;
+                    
+                    // Scale explosion with stack level
+                    const scaledRadius = baseRadius * (1 + (explosionLevel - 1) * 0.2);
+                    const scaledDamage = baseDamage * (1 + (explosionLevel - 1) * 0.3);
+                    
                     this.explosionSystem.createExplosion(
                         bulletSprite.x, 
                         bulletSprite.y, 
-                        GameConfig.explosion.damage,
-                        bullet.owner
+                        scaledDamage,
+                        bullet.owner,
+                        scaledRadius
                     );
                 }
                 
-                // Check for piercing - don't destroy if piercing
-                const hasPiercing = bullet.stats && bullet.stats.piercing;
-                if (!hasPiercing) {
+                // Mark target as hit and check if bullet should be destroyed
+                bullet.markTargetAsHit(player);
+                if (bullet.shouldDestroyAfterHit()) {
                     bullet.destroy();
                     
                     const bulletIndex = this.bullets.indexOf(bullet);
@@ -342,23 +356,37 @@ export default class GameScene extends Phaser.Scene {
             
             if (!bullet || !crate || bullet.isDestroyed || crate.isDestroyed) return;
             
+            // Check if piercing bullet has already hit this crate
+            if (bullet.hasHitTarget(crate)) {
+                return; // Skip if already hit this crate
+            }
+            
             // Damage crate
             crate.takeDamage(bullet.damage);
             
             // Check for explosion before destroying bullet
-            const hasExplosive = bullet.stats && bullet.stats.explosive;
+            const hasExplosive = bullet.stats && bullet.stats.explosive > 0;
             if (hasExplosive) {
+                const explosionLevel = bullet.stats.explosive;
+                const baseRadius = GameConfig.explosion.radius;
+                const baseDamage = GameConfig.explosion.damage;
+                
+                // Scale explosion with stack level
+                const scaledRadius = baseRadius * (1 + (explosionLevel - 1) * 0.2);
+                const scaledDamage = baseDamage * (1 + (explosionLevel - 1) * 0.3);
+                
                 this.explosionSystem.createExplosion(
                     bulletSprite.x, 
                     bulletSprite.y, 
-                    GameConfig.explosion.damage,
-                    bullet.owner
+                    scaledDamage,
+                    bullet.owner,
+                    scaledRadius
                 );
             }
             
-            // Check for piercing - don't destroy if piercing
-            const hasPiercing = bullet.stats && bullet.stats.piercing;
-            if (!hasPiercing) {
+            // Mark target as hit and check if bullet should be destroyed
+            bullet.markTargetAsHit(crate);
+            if (bullet.shouldDestroyAfterHit()) {
                 bullet.destroy();
                 
                 const bulletIndex = this.bullets.indexOf(bullet);

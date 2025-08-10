@@ -149,10 +149,12 @@ export class Player {
         if (this.isDead || !this.sprite) return;
         
         // Check shield first
-        if (this.stats && this.stats.shield && this.stats.shieldActive) {
+        if (this.stats && this.stats.shield > 0 && this.stats.shieldActive) {
             // Shield blocks one hit
             this.stats.shieldActive = false;
-            this.stats.shieldCooldown = 10000; // 10 second cooldown
+            // Cooldown decreases with stacking: 10s, 8s, 6s, 4s, 2s (min)
+            const baseCooldown = 10000;
+            this.stats.shieldCooldown = Math.max(2000, baseCooldown - (this.stats.shield - 1) * 2000);
             
             // Visual shield effect
             this.createShieldEffect();
@@ -354,7 +356,7 @@ export class Player {
     }
     
     updateShield(delta) {
-        if (!this.stats || !this.stats.shield) return;
+        if (!this.stats || this.stats.shield <= 0) return;
         
         // Reduce shield cooldown
         if (this.stats.shieldCooldown > 0) {

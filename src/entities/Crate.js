@@ -7,6 +7,7 @@ export class Crate {
         this.y = y;
         this.health = 50; // Takes 2 hits to destroy
         this.isDestroyed = false;
+        this.id = Math.random().toString(36).substr(2, 9); // Unique ID for hit tracking
         
         this.createSprite();
     }
