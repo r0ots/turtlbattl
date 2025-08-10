@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { Player } from '../entities/Player';
 import { Bullet } from '../entities/Bullet';
+import { Crate } from '../entities/Crate';
 import { IsometricUtils } from '../utils/IsometricUtils';
 import { GameConfig } from '../config/GameConfig';
 import { GameStateManager } from '../managers/GameStateManager';
@@ -15,6 +16,7 @@ export default class GameScene extends Phaser.Scene {
         super({ key: 'GameScene' });
         this.players = [];
         this.bullets = [];
+        this.crates = [];
         
         // Performance tracking
         this.lastPoolOptimization = 0;
@@ -51,6 +53,9 @@ export default class GameScene extends Phaser.Scene {
     preload() {
         // Load all sound assets
         this.soundManager.preload();
+        
+        // Load crate image
+        this.load.image('crate', '/pictures/crate.png');
     }
     
     create() {
@@ -64,6 +69,7 @@ export default class GameScene extends Phaser.Scene {
             
             this.createArena();
             this.createPlayers();
+            this.createCrates();
             this.setupCollisions();
             this.createUI();
             
@@ -90,6 +96,7 @@ export default class GameScene extends Phaser.Scene {
         this.bulletGroup = this.physics.add.group({
             runChildUpdate: true
         });
+        this.crateGroup = this.physics.add.staticGroup();
     }
     
     createArena() {
@@ -133,13 +140,97 @@ export default class GameScene extends Phaser.Scene {
         }
     }
     
+    createCrates() {
+        try {
+            const config = GameConfig.crate;
+            const arenaWidth = GameConfig.game.width - (GameConfig.arena.margin * 2);
+            const arenaHeight = GameConfig.game.height - (GameConfig.arena.margin * 2);
+            
+            // Random number of crates
+            const crateCount = Math.floor(Math.random() * (config.maxCrates - config.minCrates + 1)) + config.minCrates;
+            
+            // Player spawn positions to avoid
+            const playerSpawns = [
+                GameConfig.player.spawnPositions.player1,
+                GameConfig.player.spawnPositions.player2
+            ];
+            
+            for (let i = 0; i < crateCount; i++) {
+                let validPosition = false;
+                let x, y;
+                let attempts = 0;
+                
+                // Try to find a valid position
+                while (!validPosition && attempts < 50) {
+                    x = GameConfig.arena.margin + config.spawnMargin + 
+                        Math.random() * (arenaWidth - config.spawnMargin * 2);
+                    y = GameConfig.arena.margin + config.spawnMargin + 
+                        Math.random() * (arenaHeight - config.spawnMargin * 2);
+                    
+                    validPosition = true;
+                    
+                    // Check distance from player spawns
+                    for (const spawn of playerSpawns) {
+                        const dist = Math.sqrt(
+                            Math.pow(x - spawn.x, 2) + Math.pow(y - spawn.y, 2)
+                        );
+                        if (dist < config.minDistanceFromPlayer) {
+                            validPosition = false;
+                            break;
+                        }
+                    }
+                    
+                    // Check distance from other crates
+                    for (const crate of this.crates) {
+                        const dist = Math.sqrt(
+                            Math.pow(x - crate.x, 2) + Math.pow(y - crate.y, 2)
+                        );
+                        if (dist < config.size * 1.5) {
+                            validPosition = false;
+                            break;
+                        }
+                    }
+                    
+                    attempts++;
+                }
+                
+                if (validPosition) {
+                    const crate = new Crate(this, x, y);
+                    this.crates.push(crate);
+                    // Add to static group and set proper physics body
+                    this.crateGroup.add(crate.sprite, true);
+                    // Set the collision box size
+                    crate.sprite.body.setSize(GameConfig.crate.size, GameConfig.crate.size);
+                }
+            }
+            
+            console.log(`Created ${this.crates.length} crates`);
+        } catch (error) {
+            console.error('Failed to create crates:', error);
+        }
+    }
+    
     setupCollisions() {
+        // Player-player collisions
         this.physics.add.collider(this.playerGroup, this.playerGroup);
         
+        // Player-crate collisions (blocks movement)
+        this.physics.add.collider(this.playerGroup, this.crateGroup);
+        
+        // Bullet-player collisions
         this.physics.add.overlap(
             this.bulletGroup,
             this.playerGroup,
             this.handleBulletHit,
+            null,
+            this
+        );
+        
+        // Bullet-crate collisions
+        this.physics.add.overlap(
+            this.bulletGroup,
+            this.crateGroup,
+            this.handleBulletCrateHit,
             null,
             this
         );
@@ -175,6 +266,28 @@ export default class GameScene extends Phaser.Scene {
             }
         } catch (error) {
             console.error('Error handling bullet hit:', error);
+        }
+    }
+    
+    handleBulletCrateHit(bulletSprite, crateSprite) {
+        try {
+            const bullet = bulletSprite.getData('bullet');
+            const crate = crateSprite.getData('crate');
+            
+            if (!bullet || !crate || bullet.isDestroyed || crate.isDestroyed) return;
+            
+            // Damage crate
+            crate.takeDamage(bullet.damage);
+            
+            // Destroy bullet
+            bullet.destroy();
+            
+            const bulletIndex = this.bullets.indexOf(bullet);
+            if (bulletIndex > -1) {
+                this.bullets.splice(bulletIndex, 1);
+            }
+        } catch (error) {
+            console.error('Error handling bullet-crate collision:', error);
         }
     }
     
@@ -289,6 +402,16 @@ export default class GameScene extends Phaser.Scene {
             
             // Release all bullets back to pool
             this.bulletPool.releaseAllBullets();
+            
+            // Clear and recreate crates
+            this.crates.forEach(crate => {
+                if (crate && !crate.isDestroyed) {
+                    crate.destroy();
+                }
+            });
+            this.crates = [];
+            this.crateGroup.clear(true, true);
+            this.createCrates();
             
             const spawn1 = GameConfig.player.spawnPositions.player1;
             const spawn2 = GameConfig.player.spawnPositions.player2;

@@ -136,5 +136,14 @@ export const GameConfig = {
     physics: {
         deadzone: 0.001,  // Minimum vector length
         degreesToRadians: Math.PI / 180
+    },
+    
+    crate: {
+        health: 50,           // Takes 2 bullet hits
+        size: 60,             // 50% bigger than player size
+        minCrates: 3,         // Minimum number of crates
+        maxCrates: 8,         // Maximum number of crates
+        spawnMargin: 100,     // Margin from arena edges
+        minDistanceFromPlayer: 150  // Minimum distance from player spawn points
     }
 };

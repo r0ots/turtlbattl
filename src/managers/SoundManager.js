@@ -5,7 +5,8 @@ export class SoundManager {
             shoot: ['shoot1', 'shoot2', 'shoot3', 'shoot4'],
             hit: ['hit1', 'hit2', 'hit3', 'hit4'],
             damage: ['damage1', 'damage2', 'damage3'],
-            dash: ['dash1', 'dash2', 'dash3']
+            dash: ['dash1', 'dash2', 'dash3'],
+            crate: ['crate2']
         };
         
         this.volume = {
@@ -33,6 +34,8 @@ export class SoundManager {
         this.scene.load.audio('dash1', '/sounds/Dash 1.m4a');
         this.scene.load.audio('dash2', '/sounds/Dash 2.m4a');
         this.scene.load.audio('dash3', '/sounds/Dash 3.m4a');
+        
+        this.scene.load.audio('crate2', '/sounds/Crate 2.m4a');
     }
     
     playRandomSound(category, volume = 1.0) {
@@ -68,6 +71,10 @@ export class SoundManager {
     
     playDash() {
         this.playRandomSound('dash', 0.7);
+    }
+    
+    playCrate() {
+        this.playRandomSound('crate', 0.8);
     }
     
     setMasterVolume(volume) {

@@ -233,7 +233,7 @@ export class PlayerCombat {
             return;
         }
         
-        // Use optimized collision system
+        // Check for player hits
         const nearbyPlayers = this.collisionSystem.getPlayersNearPlayer(this.player, this.scene.players);
         const hit = this.collisionSystem.checkMeleeHit(this.player, nearbyPlayers);
         
@@ -251,6 +251,50 @@ export class PlayerCombat {
                 hitPoint: hit.hitPoint,
                 damage: GameConfig.player.melee.damage
             });
+        }
+        
+        // Check for crate hits
+        this.checkMeleeCrateHit();
+    }
+    
+    checkMeleeCrateHit() {
+        if (!this.scene.crates) return;
+        
+        const meleeRange = GameConfig.player.melee.range;
+        const meleeArc = GameConfig.player.melee.arc * GameConfig.physics.degreesToRadians;
+        const playerX = this.sprite.x;
+        const playerY = this.sprite.y;
+        const playerAngle = this.sprite.rotation;
+        
+        for (const crate of this.scene.crates) {
+            if (!crate || crate.isDestroyed) continue;
+            
+            const dx = crate.x - playerX;
+            const dy = crate.y - playerY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            // Check if crate is in range
+            if (distance > meleeRange + GameConfig.crate.size / 2) continue;
+            
+            // Check if crate is in arc
+            const angleToTarget = Math.atan2(dy, dx);
+            let angleDiff = angleToTarget - playerAngle;
+            
+            // Normalize angle difference
+            while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+            while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+            
+            if (Math.abs(angleDiff) <= meleeArc / 2) {
+                // Hit the crate!
+                crate.takeDamage(GameConfig.player.melee.damage);
+                
+                // Emit hit event for sound
+                this.eventBus.emit(GameEvents.MELEE_HIT, {
+                    attacker: this.player,
+                    target: crate,
+                    damage: GameConfig.player.melee.damage
+                });
+            }
         }
     }
     
