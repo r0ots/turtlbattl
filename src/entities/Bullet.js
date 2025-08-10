@@ -3,15 +3,17 @@ import { TextureFactory } from '../utils/TextureFactory';
 import { GameConfig } from '../config/GameConfig';
 
 export class Bullet {
-    constructor(scene, x, y, dirX, dirY, owner) {
+    constructor(scene, x, y, dirX, dirY, owner, stats = null) {
         if (!scene || typeof x !== 'number' || typeof y !== 'number' || !owner) {
             throw new Error('Invalid parameters for Bullet constructor');
         }
         
         this.scene = scene;
         this.owner = owner;
-        this.speed = GameConfig.bullet.speed;
-        this.damage = GameConfig.bullet.damage;
+        this.stats = stats; // Store reference to player stats
+        this.speed = stats ? stats.bulletSpeed : GameConfig.bullet.speed;
+        this.damage = stats ? stats.bulletDamage : GameConfig.bullet.damage;
+        this.bulletSize = stats ? stats.bulletSize : GameConfig.bullet.size;
         this.lifespan = GameConfig.bullet.lifespan;
         this.isDestroyed = false;
         this.isPooled = false;
@@ -27,7 +29,7 @@ export class Bullet {
             const texture = TextureFactory.createCircleTexture(
                 scene,
                 textureKey,
-                GameConfig.bullet.size / 2,
+                this.bulletSize / 2,
                 color
             );
             
@@ -96,8 +98,13 @@ export class Bullet {
     }
     
     // Reset bullet for reuse in object pool
-    reset(x, y, dirX, dirY, owner) {
+    reset(x, y, dirX, dirY, owner, stats = null) {
         this.owner = owner;
+        this.stats = stats;
+        // Update properties from stats
+        this.speed = stats ? stats.bulletSpeed : GameConfig.bullet.speed;
+        this.damage = stats ? stats.bulletDamage : GameConfig.bullet.damage;
+        this.bulletSize = stats ? stats.bulletSize : GameConfig.bullet.size;
         this.isDestroyed = false;
         this.lastPosition = { x, y };
         
@@ -105,6 +112,10 @@ export class Bullet {
             this.sprite.setPosition(x, y);
             this.sprite.setVisible(true);
             this.sprite.body.enable = true;
+            
+            // Update sprite scale based on bullet size
+            const scale = this.bulletSize / GameConfig.bullet.size;
+            this.sprite.setScale(scale * 0.8);
             
             // Calculate new velocity
             const length = Math.sqrt(dirX * dirX + dirY * dirY);

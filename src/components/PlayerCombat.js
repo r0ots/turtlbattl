@@ -1,6 +1,5 @@
 import { GameConfig } from '../config/GameConfig';
 import { GameEvents } from '../events/GameEvents';
-import { CollisionSystem } from '../systems/CollisionSystem';
 
 export class PlayerCombat {
     constructor(player) {
@@ -19,8 +18,9 @@ export class PlayerCombat {
         this.slashTime = 0;
         this.slashSprite = null;
         
-        // Ammo state
-        this.currentAmmo = GameConfig.player.magazineSize;
+        // Ammo state (use stats if available)
+        const stats = this.player.stats;
+        this.currentAmmo = stats ? stats.magazineSize : GameConfig.player.magazineSize;
         this.isReloading = false;
         this.reloadTimer = 0;
     }
@@ -57,7 +57,8 @@ export class PlayerCombat {
         // Manual reload on X button (button index 2)
         if (gamepad && gamepad.connected && gamepad.buttons) {
             const reloadPressed = gamepad.buttons[2]?.pressed; // X button
-            if (reloadPressed && this.currentAmmo < GameConfig.player.magazineSize && !this.isReloading) {
+            const maxAmmo = this.player.stats ? this.player.stats.magazineSize : GameConfig.player.magazineSize;
+            if (reloadPressed && this.currentAmmo < maxAmmo && !this.isReloading) {
                 this.reload();
             }
         }
@@ -80,7 +81,8 @@ export class PlayerCombat {
             if (this.isReloading) {
                 this.reloadTimer -= delta;
                 if (this.reloadTimer <= 0) {
-                    this.currentAmmo = GameConfig.player.magazineSize;
+                    const maxAmmo = this.player.stats ? this.player.stats.magazineSize : GameConfig.player.magazineSize;
+                    this.currentAmmo = maxAmmo;
                     this.isReloading = false;
                     
                     // Emit reload complete event
@@ -107,16 +109,42 @@ export class PlayerCombat {
             // Decrement ammo
             this.currentAmmo--;
             
-            // Emit bullet fired event
-            this.eventBus.emit(GameEvents.BULLET_FIRED, {
-                player: this.player,
-                playerNumber: this.player.playerNumber,
-                position: { x: this.sprite.x, y: this.sprite.y },
-                direction: shootDirection,
-                ammoRemaining: this.currentAmmo
-            });
+            // Check for triple shot
+            const bulletCount = this.player.stats ? this.player.stats.bulletCount : 1;
             
-            this.shootCooldown = this.player.shootRate;
+            if (bulletCount === 3) {
+                // Triple shot - shoot 3 bullets in a spread
+                const spreadAngle = 15 * Math.PI / 180; // 15 degrees in radians
+                const baseAngle = Math.atan2(shootDirection.y, shootDirection.x);
+                
+                for (let i = -1; i <= 1; i++) {
+                    const angle = baseAngle + (i * spreadAngle);
+                    const dir = {
+                        x: Math.cos(angle),
+                        y: Math.sin(angle)
+                    };
+                    
+                    this.eventBus.emit(GameEvents.BULLET_FIRED, {
+                        player: this.player,
+                        playerNumber: this.player.playerNumber,
+                        position: { x: this.sprite.x, y: this.sprite.y },
+                        direction: dir,
+                        ammoRemaining: this.currentAmmo
+                    });
+                }
+            } else {
+                // Normal single bullet
+                this.eventBus.emit(GameEvents.BULLET_FIRED, {
+                    player: this.player,
+                    playerNumber: this.player.playerNumber,
+                    position: { x: this.sprite.x, y: this.sprite.y },
+                    direction: shootDirection,
+                    ammoRemaining: this.currentAmmo
+                });
+            }
+            
+            const shootRate = this.player.stats ? this.player.stats.shootRate : this.player.shootRate;
+            this.shootCooldown = shootRate;
             
             // Auto-reload if out of ammo
             if (this.currentAmmo === 0) {
@@ -128,15 +156,17 @@ export class PlayerCombat {
     }
     
     reload() {
-        if (this.isReloading || this.currentAmmo === GameConfig.player.magazineSize) return;
+        const maxAmmo = this.player.stats ? this.player.stats.magazineSize : GameConfig.player.magazineSize;
+        if (this.isReloading || this.currentAmmo === maxAmmo) return;
         
+        const reloadTime = this.player.stats ? this.player.stats.reloadTime : GameConfig.player.reloadTime;
         this.isReloading = true;
-        this.reloadTimer = GameConfig.player.reloadTime;
+        this.reloadTimer = reloadTime;
         
         // Emit reload started event
         this.eventBus.emit(GameEvents.RELOAD_STARTED, {
             player: this.player,
-            reloadTime: GameConfig.player.reloadTime
+            reloadTime: reloadTime
         });
     }
     
@@ -189,7 +219,7 @@ export class PlayerCombat {
     }
     
     createSlashEffect() {
-        const range = GameConfig.player.melee.range;
+        const range = this.player.stats ? this.player.stats.meleeRange : GameConfig.player.melee.range;
         const angle = this.sprite.rotation;
         
         // Create arc visual effect
@@ -248,8 +278,9 @@ export class PlayerCombat {
         const hit = this.collisionSystem.checkMeleeHit(this.player, nearbyPlayers);
         
         if (hit) {
-            // Apply damage
-            hit.target.takeDamage(GameConfig.player.melee.damage);
+            // Apply damage (use stats if available)
+            const damage = this.player.stats ? this.player.stats.meleeDamage : GameConfig.player.melee.damage;
+            hit.target.takeDamage(damage);
             
             // Apply knockback
             hit.target.sprite.body.setVelocity(hit.knockback.x, hit.knockback.y);
@@ -259,7 +290,7 @@ export class PlayerCombat {
                 attacker: this.player,
                 target: hit.target,
                 hitPoint: hit.hitPoint,
-                damage: GameConfig.player.melee.damage
+                damage: damage
             });
         }
         

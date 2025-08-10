@@ -8,7 +8,7 @@ import { PlayerUI } from '../components/PlayerUI';
 import { GameEvents } from '../events/GameEvents';
 
 export class Player {
-    constructor(scene, x, y, playerNumber) {
+    constructor(scene, x, y, playerNumber, stats = null) {
         if (!scene || typeof x !== 'number' || typeof y !== 'number' || (playerNumber !== 1 && playerNumber !== 2)) {
             throw new Error('Invalid parameters for Player constructor');
         }
@@ -16,17 +16,25 @@ export class Player {
         this.scene = scene;
         this.eventBus = scene.eventBus; // Use scene's event bus
         this.playerNumber = playerNumber;
-        this.maxHealth = GameConfig.player.maxHealth;
-        this.health = this.maxHealth;
-        this.speed = GameConfig.player.speed;
-        this.shootRate = GameConfig.player.shootRate;
+        this.stats = stats; // PlayerStats object
+        
+        // Use stats if provided, otherwise use defaults
+        this.maxHealth = stats ? stats.maxHealth : GameConfig.player.maxHealth;
+        this.health = stats ? stats.health : this.maxHealth;
+        
+        this.speed = stats ? stats.moveSpeed : GameConfig.player.speed;
+        this.shootRate = stats ? stats.shootRate : GameConfig.player.shootRate;
         this.isDead = false;
+        this.canMove = true; // Allow movement/input (can be disabled for waiting players)
         
         // Track active effects for cleanup
         this.activeEffects = [];
         
         // Initialize effect pool
         this.effectPool = new EffectPool(scene);
+        
+        // Regeneration timer
+        this.regenTimer = 0;
         
         const color = GameConfig.player.colors[`player${playerNumber}`];
         
@@ -92,6 +100,18 @@ export class Player {
             this.combat.update(delta);
             this.ui.update();
             
+            // Handle regeneration
+            if (this.stats && this.stats.regenRate > 0) {
+                this.regenTimer += delta;
+                if (this.regenTimer >= 1000) { // Every second
+                    this.health = Math.min(this.health + this.stats.regenRate, this.maxHealth);
+                    this.regenTimer = 0;
+                }
+            }
+            
+            // Update shield system
+            this.updateShield(delta);
+            
             // Update depth if position changed
             if (positionChanged) {
                 this.updateDepth();
@@ -103,6 +123,8 @@ export class Player {
     }
     
     handleInput() {
+        if (!this.canMove) return; // Skip input if movement is disabled
+        
         const pads = this.scene.input.gamepad?.gamepads;
         
         if (pads && pads.length > this.playerNumber - 1 && pads[this.playerNumber - 1]) {
@@ -126,8 +148,27 @@ export class Player {
     takeDamage(amount) {
         if (this.isDead || !this.sprite) return;
         
+        // Check shield first
+        if (this.stats && this.stats.shield && this.stats.shieldActive) {
+            // Shield blocks one hit
+            this.stats.shieldActive = false;
+            this.stats.shieldCooldown = 10000; // 10 second cooldown
+            
+            // Visual shield effect
+            this.createShieldEffect();
+            
+            console.log(`Shield blocked damage for Player ${this.playerNumber}`);
+            return; // No damage taken
+        }
+        
+        // Apply damage reduction from stats
+        let actualDamage = amount;
+        if (this.stats && this.stats.damageReduction < 1) {
+            actualDamage = Math.floor(amount * this.stats.damageReduction);
+        }
+        
         const oldHealth = this.health;
-        this.health = Math.max(0, this.health - amount);
+        this.health = Math.max(0, this.health - actualDamage);
         
         // Emit damage taken event
         this.eventBus.emit(GameEvents.PLAYER_DAMAGE_TAKEN, {
@@ -312,6 +353,59 @@ export class Player {
         }
     }
     
+    updateShield(delta) {
+        if (!this.stats || !this.stats.shield) return;
+        
+        // Reduce shield cooldown
+        if (this.stats.shieldCooldown > 0) {
+            this.stats.shieldCooldown -= delta;
+            if (this.stats.shieldCooldown <= 0) {
+                this.stats.shieldActive = true;
+                console.log(`Shield recharged for Player ${this.playerNumber}`);
+            }
+        } else if (!this.stats.shieldActive) {
+            // Shield should be active if cooldown is 0
+            this.stats.shieldActive = true;
+        }
+    }
+    
+    createShieldEffect() {
+        try {
+            // Create visual shield effect when blocking
+            const shield = this.scene.add.graphics();
+            shield.setPosition(this.sprite.x, this.sprite.y);
+            shield.setDepth(this.sprite.depth + 10);
+            
+            // Draw shield circle
+            shield.lineStyle(4, 0x00FFFF, 0.8);
+            shield.strokeCircle(0, 0, GameConfig.player.size);
+            
+            // Add sparkle effect
+            shield.fillStyle(0xFFFFFF, 0.6);
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const x = Math.cos(angle) * GameConfig.player.size;
+                const y = Math.sin(angle) * GameConfig.player.size;
+                shield.fillCircle(x, y, 3);
+            }
+            
+            // Animate shield
+            this.scene.tweens.add({
+                targets: shield,
+                scaleX: { from: 0.5, to: 1.5 },
+                scaleY: { from: 0.5, to: 1.5 },
+                alpha: { from: 0.8, to: 0 },
+                duration: 400,
+                ease: 'Power2',
+                onComplete: () => {
+                    shield.destroy();
+                }
+            });
+        } catch (error) {
+            console.error('Error creating shield effect:', error);
+        }
+    }
+    
     destroy() {
         // Clean up active effects
         if (this.activeEffects) {
@@ -351,7 +445,8 @@ export class Player {
         // Destroy main sprite
         if (this.sprite) {
             this.sprite.removeAllListeners();
-            this.sprite.removeData();
+            // Clear data instead of removeData() which doesn't exist
+            this.sprite.setData('player', null);
             this.sprite.destroy();
             this.sprite = null;
         }

@@ -160,6 +160,14 @@ export const GameConfig = {
         }
     },
     
+    explosion: {
+        radius: 80,           // Explosion radius
+        damage: 30,           // Base explosion damage
+        visualRadius: 100,    // Visual effect radius
+        duration: 300,        // Effect duration in ms
+        color: 0xFF6600       // Orange explosion color
+    },
+    
     crate: {
         health: 50,           // Takes 2 bullet hits
         size: 60,             // 50% bigger than player size

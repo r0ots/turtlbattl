@@ -32,16 +32,16 @@ export class BulletPool {
         return bullet;
     }
     
-    getBullet(x, y, dirX, dirY, owner) {
+    getBullet(x, y, dirX, dirY, owner, stats = null) {
         let bullet;
         
         if (this.pool.length > 0) {
             // Reuse existing bullet from pool
             bullet = this.pool.pop();
-            bullet.reset(x, y, dirX, dirY, owner);
+            bullet.reset(x, y, dirX, dirY, owner, stats);
         } else {
             // Pool is empty, create new bullet
-            bullet = new Bullet(this.scene, x, y, dirX, dirY, owner);
+            bullet = new Bullet(this.scene, x, y, dirX, dirY, owner, stats);
             bullet.isPooled = true;
             bullet.release = () => this.releaseBullet(bullet);
         }

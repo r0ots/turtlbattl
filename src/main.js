@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import GameScene from './scenes/GameScene';
+import { UpgradeScene } from './scenes/UpgradeScene';
 import { GameConfig } from './config/GameConfig';
 
 const config = {
@@ -24,7 +25,7 @@ const config = {
     input: {
         gamepad: true
     },
-    scene: [GameScene],
+    scene: [GameScene, UpgradeScene],
     fullscreenTarget: 'game-container'
 };
 

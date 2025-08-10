@@ -170,17 +170,20 @@ export class PlayerUI {
         const healthPercent = Math.max(0, Math.min(1, this.player.health / this.player.maxHealth));
         this.healthBar.scaleX = healthPercent;
         
-        // Update dash indicator
+        // Update dash indicator (now shows charges instead of cooldown)
         if (this.dashIndicator) {
             this.dashIndicator.x = this.sprite.x - config.width / 2;
             this.dashIndicator.y = this.sprite.y - config.offsetY - GameConfig.ui.dashIndicator.offsetY;
             
-            // Show cooldown progress
-            const dashPercent = Math.max(0, 1 - (this.player.movement.dashCooldown / GameConfig.player.dash.cooldown));
-            this.dashIndicator.scaleX = dashPercent;
+            const maxCharges = this.player.stats ? this.player.stats.dashCharges : 1;
+            const currentCharges = this.player.movement.currentDashCharges;
+            
+            // Show charges as percentage
+            const chargePercent = currentCharges / maxCharges;
+            this.dashIndicator.scaleX = chargePercent;
             
             // Change color based on availability
-            if (this.player.movement.dashCooldown <= 0) {
+            if (currentCharges > 0) {
                 this.dashIndicator.setFillStyle(GameConfig.ui.dashIndicator.readyColor);
             } else {
                 this.dashIndicator.setFillStyle(GameConfig.ui.dashIndicator.cooldownColor);

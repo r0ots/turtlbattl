@@ -10,6 +10,8 @@ import { EventBus } from '../events/EventBus';
 import { GameEvents } from '../events/GameEvents';
 import { CollisionSystem } from '../systems/CollisionSystem';
 import { BulletPool } from '../systems/BulletPool';
+import { PlayerStats } from '../systems/PlayerStats';
+import { ExplosionSystem } from '../systems/ExplosionSystem';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -26,6 +28,17 @@ export default class GameScene extends Phaser.Scene {
         this.eventBus = new EventBus();
         this.collisionSystem = new CollisionSystem(this);
         this.soundManager = new SoundManager(this);
+        this.explosionSystem = new ExplosionSystem(this);
+        
+        // Player stats for upgrades
+        this.playerStats = [
+            new PlayerStats(1),
+            new PlayerStats(2)
+        ];
+        
+        // Upgrade selection state
+        this.isUpgradeActive = false;
+        
         this.setupEventListeners();
     }
     
@@ -33,12 +46,15 @@ export default class GameScene extends Phaser.Scene {
         // Player events
         this.eventBus.on(GameEvents.PLAYER_DEATH, (data) => this.onPlayerDeath(data.player));
         this.eventBus.on(GameEvents.BULLET_FIRED, (data) => {
+            // Get player stats for bullet properties
+            const playerStats = this.playerStats[data.playerNumber - 1];
             this.createBullet(
                 data.position.x, 
                 data.position.y, 
                 data.direction.x, 
                 data.direction.y, 
-                data.playerNumber
+                data.playerNumber,
+                playerStats
             );
             this.soundManager.playShoot();
         });
@@ -78,6 +94,9 @@ export default class GameScene extends Phaser.Scene {
             this.createCrates();
             this.setupCollisions();
             this.createUI();
+            
+            // Setup debug keyboard controls
+            this.setupDebugControls();
             
             // Ensure gamepad is started and ready
             if (this.input.gamepad) {
@@ -146,8 +165,8 @@ export default class GameScene extends Phaser.Scene {
                 y: height * 0.5 
             };
             
-            const player1 = new Player(this, spawn1.x, spawn1.y, 1);
-            const player2 = new Player(this, spawn2.x, spawn2.y, 2);
+            const player1 = new Player(this, spawn1.x, spawn1.y, 1, this.playerStats[0]);
+            const player2 = new Player(this, spawn2.x, spawn2.y, 2, this.playerStats[1]);
             
             this.players = [player1, player2];
             
@@ -264,6 +283,18 @@ export default class GameScene extends Phaser.Scene {
             if (!bullet || !player || bullet.isDestroyed || player.isDead) return;
             
             if (bullet.owner !== player.playerNumber) {
+                // Apply vampirism if the bullet owner has it
+                const ownerStats = this.playerStats[bullet.owner - 1];
+                if (ownerStats && ownerStats.vampirism > 0) {
+                    const ownerPlayer = this.players[bullet.owner - 1];
+                    if (ownerPlayer && !ownerPlayer.isDead) {
+                        ownerPlayer.health = Math.min(
+                            ownerPlayer.health + ownerStats.vampirism,
+                            ownerPlayer.maxHealth
+                        );
+                    }
+                }
+                
                 player.takeDamage(bullet.damage);
                 
                 // Emit bullet hit event for sound
@@ -273,11 +304,26 @@ export default class GameScene extends Phaser.Scene {
                     position: { x: bulletSprite.x, y: bulletSprite.y }
                 });
                 
-                bullet.destroy();
+                // Check for explosion before destroying bullet
+                const hasExplosive = bullet.stats && bullet.stats.explosive;
+                if (hasExplosive) {
+                    this.explosionSystem.createExplosion(
+                        bulletSprite.x, 
+                        bulletSprite.y, 
+                        GameConfig.explosion.damage,
+                        bullet.owner
+                    );
+                }
                 
-                const bulletIndex = this.bullets.indexOf(bullet);
-                if (bulletIndex > -1) {
-                    this.bullets.splice(bulletIndex, 1);
+                // Check for piercing - don't destroy if piercing
+                const hasPiercing = bullet.stats && bullet.stats.piercing;
+                if (!hasPiercing) {
+                    bullet.destroy();
+                    
+                    const bulletIndex = this.bullets.indexOf(bullet);
+                    if (bulletIndex > -1) {
+                        this.bullets.splice(bulletIndex, 1);
+                    }
                 }
                 
                 if (player.isDead) {
@@ -299,16 +345,67 @@ export default class GameScene extends Phaser.Scene {
             // Damage crate
             crate.takeDamage(bullet.damage);
             
-            // Destroy bullet
-            bullet.destroy();
+            // Check for explosion before destroying bullet
+            const hasExplosive = bullet.stats && bullet.stats.explosive;
+            if (hasExplosive) {
+                this.explosionSystem.createExplosion(
+                    bulletSprite.x, 
+                    bulletSprite.y, 
+                    GameConfig.explosion.damage,
+                    bullet.owner
+                );
+            }
             
-            const bulletIndex = this.bullets.indexOf(bullet);
-            if (bulletIndex > -1) {
-                this.bullets.splice(bulletIndex, 1);
+            // Check for piercing - don't destroy if piercing
+            const hasPiercing = bullet.stats && bullet.stats.piercing;
+            if (!hasPiercing) {
+                bullet.destroy();
+                
+                const bulletIndex = this.bullets.indexOf(bullet);
+                if (bulletIndex > -1) {
+                    this.bullets.splice(bulletIndex, 1);
+                }
             }
         } catch (error) {
             console.error('Error handling bullet-crate collision:', error);
         }
+    }
+    
+    setupDebugControls() {
+        // Debug keyboard controls for testing
+        this.input.keyboard.on('keydown-ONE', () => {
+            console.log('DEBUG: Killing Player 1');
+            if (this.players[0] && !this.players[0].isDead) {
+                this.players[0].takeDamage(9999);
+            }
+        });
+        
+        this.input.keyboard.on('keydown-TWO', () => {
+            console.log('DEBUG: Killing Player 2');
+            if (this.players[1] && !this.players[1].isDead) {
+                this.players[1].takeDamage(9999);
+            }
+        });
+        
+        // Additional debug controls
+        this.input.keyboard.on('keydown-R', () => {
+            console.log('DEBUG: Restarting round');
+            this.resetRound();
+        });
+        
+        this.input.keyboard.on('keydown-U', () => {
+            console.log('DEBUG: Current upgrades:');
+            this.playerStats.forEach((stats, index) => {
+                console.log(`Player ${index + 1} upgrades:`, stats.upgrades);
+                console.log(`Player ${index + 1} stats:`, stats.getStats());
+            });
+        });
+        
+        console.log('DEBUG CONTROLS ENABLED:');
+        console.log('- Press 1: Kill Player 1');
+        console.log('- Press 2: Kill Player 2');
+        console.log('- Press R: Restart Round');
+        console.log('- Press U: Show Upgrades');
     }
     
     createUI() {
@@ -332,6 +429,11 @@ export default class GameScene extends Phaser.Scene {
     update(time, delta) {
         if (!this.gameState.isRoundInProgress()) return;
         
+        // Skip updates during upgrade selection
+        if (this.isUpgradeActive) {
+            return;
+        }
+        
         try {
             this.players.forEach(player => player.update(delta));
             
@@ -351,7 +453,7 @@ export default class GameScene extends Phaser.Scene {
         }
     }
     
-    createBullet(x, y, dirX, dirY, owner) {
+    createBullet(x, y, dirX, dirY, owner, stats = null) {
         try {
             if (!this.bulletPool) {
                 console.error('BulletPool not initialized yet');
@@ -364,7 +466,7 @@ export default class GameScene extends Phaser.Scene {
             }
             
             // Use bullet pool for better performance
-            const bullet = this.bulletPool.getBullet(x, y, dirX, dirY, owner);
+            const bullet = this.bulletPool.getBullet(x, y, dirX, dirY, owner, stats);
             
             if (bullet && bullet.sprite) {
                 this.bullets.push(bullet);
@@ -382,16 +484,27 @@ export default class GameScene extends Phaser.Scene {
     onPlayerDeath(deadPlayer) {
         try {
             const winner = deadPlayer.playerNumber === 1 ? 2 : 1;
+            const loser = deadPlayer.playerNumber;
             this.gameState.addScore(winner);
-            this.endRound(winner);
+            
+            console.log(`DEBUG: Showing victory animation, then upgrade selection`);
+            
+            // Show "Player X Wins!" animation first
+            this.showVictoryAnimation(winner, () => {
+                // After victory animation, start upgrade selection
+                this.startUpgradeSelection(loser, winner);
+            });
+            
         } catch (error) {
             console.error('Error handling player death:', error);
         }
     }
     
-    endRound(winner) {
+    showVictoryAnimation(winner, onComplete) {
+        // End the round state
         this.gameState.endRound();
         
+        // Show victory text
         const color = winner === 1 ? '#4CAF50' : '#2196F3';
         this.roundText.setText(`Player ${winner} Wins!`);
         this.roundText.setColor(color);
@@ -402,10 +515,47 @@ export default class GameScene extends Phaser.Scene {
             duration: GameConfig.effects.roundEnd.duration,
             ease: 'Back.easeOut',
             onComplete: () => {
-                this.time.delayedCall(GameConfig.effects.roundEnd.delay, () => {
-                    this.resetRound();
+                // Wait a moment, then proceed to upgrades
+                this.time.delayedCall(1000, () => {
+                    // Hide the victory text
+                    this.roundText.setScale(0);
+                    onComplete();
                 });
             }
+        });
+    }
+    
+    startUpgradeSelection(loser, winner) {
+        console.log(`DEBUG: Starting upgrade selection - Dead player ${loser} selects first, winner ${winner} second`);
+        
+        // Disable game updates
+        this.isUpgradeActive = true;
+        
+        // Launch upgrade scene with turn-based selection
+        this.scene.launch('UpgradeScene', {
+            playerStats: this.playerStats,
+            deadPlayer: loser,
+            winner: winner,
+            onComplete: (selectedUpgrades) => {
+                this.onUpgradesComplete(selectedUpgrades, winner);
+            }
+        });
+    }
+    
+    onUpgradesComplete(selectedUpgrades, winner) {
+        console.log(`DEBUG: Both players completed upgrade selection:`, selectedUpgrades);
+        this.endRound(winner);
+    }
+    
+    endRound(winner) {
+        console.log('endRound called - starting new round after upgrades');
+        
+        // Re-enable game updates
+        this.isUpgradeActive = false;
+        
+        // Start new round immediately (victory animation already shown)
+        this.time.delayedCall(500, () => {
+            this.resetRound();
         });
     }
     
@@ -503,6 +653,11 @@ export default class GameScene extends Phaser.Scene {
         if (this.collisionSystem) {
             this.collisionSystem.destroy();
             this.collisionSystem = null;
+        }
+        
+        if (this.explosionSystem) {
+            this.explosionSystem.destroy();
+            this.explosionSystem = null;
         }
         
         if (this.eventBus) {

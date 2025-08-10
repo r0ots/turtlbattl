@@ -18,6 +18,8 @@ export class PlayerMovement {
         this.dashCooldown = 0;
         this.dashDirection = { x: 0, y: 0 };
         this.dashTime = 0;
+        this.currentDashCharges = 1;  // Current available charges
+        this.dashChargeTimer = 0;     // Timer for charge regeneration
     }
     
     handleInput(gamepad) {
@@ -56,10 +58,8 @@ export class PlayerMovement {
                 return true; // Position changed
             }
             
-            // Update dash
-            if (this.dashCooldown > 0) {
-                this.dashCooldown -= delta;
-            }
+            // Update dash charges
+            this.updateDashCharges(delta);
             this.updateDash(delta);
             
             return false; // Position unchanged
@@ -91,9 +91,18 @@ export class PlayerMovement {
             moveY /= length;
         }
         
+        let speed = this.player.stats ? this.player.stats.moveSpeed : this.player.speed;
+        
+        // Apply slowdown while shooting (unless quickFeet upgrade)
+        const isShooting = this.player.combat && this.player.combat.shootCooldown > 0;
+        const hasQuickFeet = this.player.stats && this.player.stats.quickFeet;
+        if (isShooting && !hasQuickFeet) {
+            speed *= 0.6; // 40% speed reduction while shooting
+        }
+        
         this.sprite.body.setVelocity(
-            moveX * this.player.speed,
-            moveY * this.player.speed
+            moveX * speed,
+            moveY * speed
         );
     }
     
@@ -150,7 +159,7 @@ export class PlayerMovement {
     }
     
     dash() {
-        if (this.dashCooldown > 0 || this.isDashing || this.player.isDead) return;
+        if (this.currentDashCharges <= 0 || this.isDashing || this.player.isDead) return;
         
         // Get dash direction from movement or facing direction
         let dashX = this.moveDirection.x;
@@ -170,7 +179,9 @@ export class PlayerMovement {
         this.dashDirection = { x: dashX, y: dashY };
         this.isDashing = true;
         this.dashTime = GameConfig.player.dash.duration;
-        this.dashCooldown = GameConfig.player.dash.cooldown;
+        
+        // Consume a dash charge instead of setting cooldown
+        this.currentDashCharges -= 1;
         
         // Emit dash event
         this.eventBus.emit(GameEvents.PLAYER_DASH, {
@@ -181,11 +192,34 @@ export class PlayerMovement {
         });
         
         // Visual feedback - make player semi-transparent during dash
-        this.sprite.setAlpha(0.7);
+        const hasPhase = this.player.stats && this.player.stats.phaseDash;
+        this.sprite.setAlpha(hasPhase ? 0.4 : 0.7);
+        
+        // Set collision immunity for phase dash
+        if (hasPhase && this.sprite.body) {
+            this.sprite.body.checkCollision.none = true;
+        }
         
         // Add trail effect through player
         if (this.player.createDashTrail) {
             this.player.createDashTrail();
+        }
+    }
+    
+    updateDashCharges(delta) {
+        const maxCharges = this.player.stats ? this.player.stats.dashCharges : 1;
+        
+        // If we have fewer charges than max, regenerate them
+        if (this.currentDashCharges < maxCharges) {
+            this.dashChargeTimer += delta;
+            
+            // Regenerate one charge every cooldown period
+            if (this.dashChargeTimer >= GameConfig.player.dash.cooldown) {
+                this.currentDashCharges = Math.min(this.currentDashCharges + 1, maxCharges);
+                this.dashChargeTimer = 0;
+            }
+        } else {
+            this.dashChargeTimer = 0;
         }
     }
     
@@ -197,6 +231,11 @@ export class PlayerMovement {
         if (this.dashTime <= 0) {
             this.isDashing = false;
             this.sprite.setAlpha(1);
+            
+            // Restore collision detection after phase dash ends
+            if (this.sprite.body) {
+                this.sprite.body.checkCollision.none = false;
+            }
         } else {
             // Apply dash velocity
             this.sprite.body.setVelocity(
