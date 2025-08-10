@@ -33,6 +33,8 @@ export class PlayerStats {
         this.bulletCount = 1;
         this.regenRate = 0;
         this.damageReduction = 1;
+        this.homing = 0;         // Homing strength level
+        this.rebounds = 0;       // Rebound count
         
         // Shield system
         this.shieldActive = false;

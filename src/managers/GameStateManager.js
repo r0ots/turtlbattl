@@ -119,7 +119,9 @@ export class GameStateManager {
             'shield': '🛡️ Shield',
             'dash_master': '💨 Dash Master',
             'berserker': '😤 Berserker',
-            'reflect': '🪞 Reflect'
+            'reflect': '🪞 Reflect',
+            'rebound': '🔄 Ricochet',
+            'homing': '🎯 Homing'
         };
         return names[upgradeId] || upgradeId;
     }

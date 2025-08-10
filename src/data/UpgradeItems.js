@@ -46,6 +46,24 @@ export const UpgradeItems = {
             stats.explosive = (stats.explosive || 0) + 1;
         }
     },
+    REBOUND: {
+        id: 'rebound',
+        name: 'Ricochet Rounds',
+        description: 'Bullets bounce +2 times',
+        category: 'offensive',
+        effect: (stats) => {
+            stats.rebounds = (stats.rebounds || 0) + 2;
+        }
+    },
+    HOMING: {
+        id: 'homing',
+        name: 'Homing Rounds',
+        description: 'Bullets gently curve towards enemies',
+        category: 'offensive',
+        effect: (stats) => {
+            stats.homing = (stats.homing || 0) + 1;
+        }
+    },
     
     // Defensive Upgrades
     HEALTH_UP: {

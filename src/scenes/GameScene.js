@@ -13,6 +13,8 @@ import { BulletPool } from '../systems/BulletPool';
 import { PlayerStats } from '../systems/PlayerStats';
 import { ExplosionSystem } from '../systems/ExplosionSystem';
 import { PatternPlacer } from '../utils/PatternPlacer';
+import { DebugConfig } from '../config/DebugConfig';
+import { UpgradeItems } from '../data/UpgradeItems';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -189,8 +191,69 @@ export default class GameScene extends Phaser.Scene {
             if (this.gameState) {
                 this.gameState.setPlayers(this.players);
             }
+            
+            // Apply debug upgrades if enabled
+            this.applyDebugUpgrades();
         } catch (error) {
             console.error('Failed to create players:', error);
+        }
+    }
+    
+    applyDebugUpgrades() {
+        if (!DebugConfig.DEBUG_MODE) return;
+        
+        try {
+            // Apply upgrades to Player 1
+            const player1Upgrades = DebugConfig.getStartingUpgrades(1);
+            if (player1Upgrades.length > 0) {
+                player1Upgrades.forEach(upgradeId => {
+                    // Convert upgradeId to uppercase and find the upgrade object
+                    const upgradeKey = upgradeId.toUpperCase();
+                    const upgrade = UpgradeItems[upgradeKey];
+                    if (upgrade) {
+                        this.playerStats[0].applyUpgrade(upgrade);
+                    } else {
+                        console.warn(`Unknown upgrade ID: ${upgradeId}`);
+                    }
+                });
+                
+                if (DebugConfig.LOG_UPGRADES) {
+                    console.log('🔧 DEBUG: Player 1 starting upgrades:', player1Upgrades);
+                }
+            }
+            
+            // Apply upgrades to Player 2
+            const player2Upgrades = DebugConfig.getStartingUpgrades(2);
+            if (player2Upgrades.length > 0) {
+                player2Upgrades.forEach(upgradeId => {
+                    // Convert upgradeId to uppercase and find the upgrade object
+                    const upgradeKey = upgradeId.toUpperCase();
+                    const upgrade = UpgradeItems[upgradeKey];
+                    if (upgrade) {
+                        this.playerStats[1].applyUpgrade(upgrade);
+                    } else {
+                        console.warn(`Unknown upgrade ID: ${upgradeId}`);
+                    }
+                });
+                
+                if (DebugConfig.LOG_UPGRADES) {
+                    console.log('🔧 DEBUG: Player 2 starting upgrades:', player2Upgrades);
+                }
+            }
+            
+            // Update UI to show new stats
+            if (this.gameState) {
+                this.gameState.updateStatsUI();
+            }
+            
+            // Log current stats if enabled
+            if (DebugConfig.LOG_UPGRADES && (player1Upgrades.length > 0 || player2Upgrades.length > 0)) {
+                console.log('🔧 DEBUG: Player 1 stats:', this.playerStats[0].getStats());
+                console.log('🔧 DEBUG: Player 2 stats:', this.playerStats[1].getStats());
+            }
+            
+        } catch (error) {
+            console.error('Failed to apply debug upgrades:', error);
         }
     }
     
@@ -390,37 +453,90 @@ export default class GameScene extends Phaser.Scene {
                 return; // Skip if already hit this crate
             }
             
-            // Damage crate
-            crate.takeDamage(bullet.damage);
+            // Check if bullet can rebound off crate
+            const canRebound = bullet.maxRebounds > 0 && bullet.currentRebounds < bullet.maxRebounds;
             
-            // Check for explosion before destroying bullet
-            const hasExplosive = bullet.stats && bullet.stats.explosive > 0;
-            if (hasExplosive) {
-                const explosionLevel = bullet.stats.explosive;
-                const baseRadius = GameConfig.explosion.radius;
-                const baseDamage = GameConfig.explosion.damage;
+            if (canRebound) {
+                // Calculate bounce direction
+                const crateCenterX = crateSprite.x;
+                const crateCenterY = crateSprite.y;
+                const bulletX = bulletSprite.x;
+                const bulletY = bulletSprite.y;
                 
-                // Scale explosion with stack level
-                const scaledRadius = baseRadius * (1 + (explosionLevel - 1) * 0.2);
-                const scaledDamage = baseDamage * (1 + (explosionLevel - 1) * 0.3);
+                // Calculate relative position
+                const dx = bulletX - crateCenterX;
+                const dy = bulletY - crateCenterY;
                 
-                this.explosionSystem.createExplosion(
-                    bulletSprite.x, 
-                    bulletSprite.y, 
-                    scaledDamage,
-                    bullet.owner,
-                    scaledRadius
-                );
-            }
-            
-            // Mark target as hit and check if bullet should be destroyed
-            bullet.markTargetAsHit(crate);
-            if (bullet.shouldDestroyAfterHit()) {
-                bullet.destroy();
+                // Calculate bounce angle (reflect off the surface)
+                const absX = Math.abs(dx);
+                const absY = Math.abs(dy);
                 
-                const bulletIndex = this.bullets.indexOf(bullet);
-                if (bulletIndex > -1) {
-                    this.bullets.splice(bulletIndex, 1);
+                // Determine which side was hit and bounce accordingly
+                if (absX > absY) {
+                    // Hit from left or right - bounce horizontally
+                    bullet.velocity.x = -bullet.velocity.x;
+                } else {
+                    // Hit from top or bottom - bounce vertically
+                    bullet.velocity.y = -bullet.velocity.y;
+                }
+                
+                // Apply new velocity
+                bullet.sprite.body.setVelocity(bullet.velocity.x, bullet.velocity.y);
+                
+                // Update rotation
+                bullet.sprite.rotation = Math.atan2(bullet.velocity.y, bullet.velocity.x);
+                
+                // Increment rebound counter
+                bullet.currentRebounds++;
+                
+                // Move bullet slightly away from crate to prevent multiple collisions
+                const pushDistance = 8;
+                const pushX = Math.sign(dx) * pushDistance;
+                const pushY = Math.sign(dy) * pushDistance;
+                bullet.sprite.x += pushX;
+                bullet.sprite.y += pushY;
+                
+                // Mark this crate as hit to prevent multiple rebounds from same crate
+                bullet.markTargetAsHit(crate);
+                
+                // Still damage the crate on bounce
+                crate.takeDamage(bullet.damage);
+                
+            } else {
+                // No rebounds left or no rebound ability - damage crate and possibly destroy bullet
+                
+                // Damage crate
+                crate.takeDamage(bullet.damage);
+                
+                // Check for explosion before destroying bullet
+                const hasExplosive = bullet.stats && bullet.stats.explosive > 0;
+                if (hasExplosive) {
+                    const explosionLevel = bullet.stats.explosive;
+                    const baseRadius = GameConfig.explosion.radius;
+                    const baseDamage = GameConfig.explosion.damage;
+                    
+                    // Scale explosion with stack level
+                    const scaledRadius = baseRadius * (1 + (explosionLevel - 1) * 0.2);
+                    const scaledDamage = baseDamage * (1 + (explosionLevel - 1) * 0.3);
+                    
+                    this.explosionSystem.createExplosion(
+                        bulletSprite.x, 
+                        bulletSprite.y, 
+                        scaledDamage,
+                        bullet.owner,
+                        scaledRadius
+                    );
+                }
+                
+                // Mark target as hit and check if bullet should be destroyed
+                bullet.markTargetAsHit(crate);
+                if (bullet.shouldDestroyAfterHit()) {
+                    bullet.destroy();
+                    
+                    const bulletIndex = this.bullets.indexOf(bullet);
+                    if (bulletIndex > -1) {
+                        this.bullets.splice(bulletIndex, 1);
+                    }
                 }
             }
         } catch (error) {
@@ -440,37 +556,83 @@ export default class GameScene extends Phaser.Scene {
                 return; // Skip if already hit this wall
             }
             
-            // Damage wall
-            wall.takeDamage(bullet.damage);
+            // Check if bullet can rebound off wall
+            const canRebound = bullet.maxRebounds > 0 && bullet.currentRebounds < bullet.maxRebounds;
             
-            // Check for explosion before destroying bullet
-            const hasExplosive = bullet.stats && bullet.stats.explosive > 0;
-            if (hasExplosive) {
-                const explosionLevel = bullet.stats.explosive;
-                const baseRadius = GameConfig.explosion.radius;
-                const baseDamage = GameConfig.explosion.damage;
+            if (canRebound) {
+                // Calculate bounce direction based on wall orientation
+                const wallCenterX = wallSprite.x;
+                const wallCenterY = wallSprite.y;
+                const bulletX = bulletSprite.x;
+                const bulletY = bulletSprite.y;
                 
-                // Scale explosion with stack level
-                const scaledRadius = baseRadius * (1 + (explosionLevel - 1) * 0.2);
-                const scaledDamage = baseDamage * (1 + (explosionLevel - 1) * 0.3);
+                // Determine which side of the wall was hit
+                const dx = bulletX - wallCenterX;
+                const dy = bulletY - wallCenterY;
                 
-                this.explosionSystem.createExplosion(
-                    bulletSprite.x, 
-                    bulletSprite.y, 
-                    scaledDamage,
-                    bullet.owner,
-                    scaledRadius
-                );
-            }
-            
-            // Mark target as hit and check if bullet should be destroyed
-            bullet.markTargetAsHit(wall);
-            if (bullet.shouldDestroyAfterHit()) {
-                bullet.destroy();
+                // Simple bounce: reverse velocity component based on wall orientation
+                if (wall.orientation === 'horizontal') {
+                    // Horizontal wall - bounce vertically
+                    bullet.velocity.y = -bullet.velocity.y;
+                } else {
+                    // Vertical wall - bounce horizontally  
+                    bullet.velocity.x = -bullet.velocity.x;
+                }
                 
-                const bulletIndex = this.bullets.indexOf(bullet);
-                if (bulletIndex > -1) {
-                    this.bullets.splice(bulletIndex, 1);
+                // Apply new velocity
+                bullet.sprite.body.setVelocity(bullet.velocity.x, bullet.velocity.y);
+                
+                // Update rotation
+                bullet.sprite.rotation = Math.atan2(bullet.velocity.y, bullet.velocity.x);
+                
+                // Increment rebound counter
+                bullet.currentRebounds++;
+                
+                // Move bullet slightly away from wall to prevent multiple collisions
+                const pushDistance = 5;
+                const pushX = Math.sign(dx) * pushDistance;
+                const pushY = Math.sign(dy) * pushDistance;
+                bullet.sprite.x += pushX;
+                bullet.sprite.y += pushY;
+                
+                // Mark this wall as hit to prevent multiple rebounds from same wall
+                bullet.markTargetAsHit(wall);
+                
+            } else {
+                // No rebounds left or no rebound ability - damage wall and possibly destroy bullet
+                
+                // Damage wall
+                wall.takeDamage(bullet.damage);
+                
+                // Check for explosion before destroying bullet
+                const hasExplosive = bullet.stats && bullet.stats.explosive > 0;
+                if (hasExplosive) {
+                    const explosionLevel = bullet.stats.explosive;
+                    const baseRadius = GameConfig.explosion.radius;
+                    const baseDamage = GameConfig.explosion.damage;
+                    
+                    // Scale explosion with stack level
+                    const scaledRadius = baseRadius * (1 + (explosionLevel - 1) * 0.2);
+                    const scaledDamage = baseDamage * (1 + (explosionLevel - 1) * 0.3);
+                    
+                    this.explosionSystem.createExplosion(
+                        bulletSprite.x, 
+                        bulletSprite.y, 
+                        scaledDamage,
+                        bullet.owner,
+                        scaledRadius
+                    );
+                }
+                
+                // Mark target as hit and check if bullet should be destroyed
+                bullet.markTargetAsHit(wall);
+                if (bullet.shouldDestroyAfterHit()) {
+                    bullet.destroy();
+                    
+                    const bulletIndex = this.bullets.indexOf(bullet);
+                    if (bulletIndex > -1) {
+                        this.bullets.splice(bulletIndex, 1);
+                    }
                 }
             }
         } catch (error) {
