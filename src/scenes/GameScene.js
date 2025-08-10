@@ -62,7 +62,8 @@ export default class GameScene extends Phaser.Scene {
         // Sound events
         this.eventBus.on(GameEvents.BULLET_HIT, () => this.soundManager.playHit());
         this.eventBus.on(GameEvents.MELEE_HIT, () => this.soundManager.playHit());
-        this.eventBus.on(GameEvents.PLAYER_DAMAGE_TAKEN, () => this.soundManager.playDamage());
+        this.eventBus.on(GameEvents.MELEE_ATTACK, () => this.soundManager.playSlash());
+        this.eventBus.on(GameEvents.PLAYER_DEATH, () => this.soundManager.playDamage());
         this.eventBus.on(GameEvents.PLAYER_DASH, () => this.soundManager.playDash());
     }
     

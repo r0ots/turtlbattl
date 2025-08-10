@@ -70,7 +70,11 @@ export class SoundManager {
     }
     
     playDash() {
-        this.playRandomSound('dash', 0.7);
+        this.playRandomSound('dash', 1.2);  // Increased from 0.7 to 1.2 for louder dash
+    }
+    
+    playSlash() {
+        this.playRandomSound('dash', 1.0);  // Use dash sound for slash attacks
     }
     
     playCrate() {
