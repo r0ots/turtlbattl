@@ -75,6 +75,20 @@ export class Bullet {
         }
         
         if (this.isOutOfBounds()) {
+            // Check for explosion when going out of bounds
+            if (this.stats && this.stats.explosive > 0 && this.scene.explosionSystem) {
+                const explosionLevel = this.stats.explosive;
+                const scaledRadius = GameConfig.explosion.radius * (1 + explosionLevel * 0.2);
+                const scaledDamage = GameConfig.explosion.damage * (1 + explosionLevel * 0.2);
+                
+                this.scene.explosionSystem.createExplosion(
+                    this.sprite.x, 
+                    this.sprite.y, 
+                    scaledDamage,
+                    this.owner,
+                    scaledRadius
+                );
+            }
             this.destroy();
         }
     }
@@ -144,6 +158,20 @@ export class Bullet {
                 this.lifespanTimer.remove();
             }
             this.lifespanTimer = this.scene.time.delayedCall(this.lifespan, () => {
+                // Check for explosion on timeout
+                if (this.stats && this.stats.explosive > 0 && this.scene.explosionSystem) {
+                    const explosionLevel = this.stats.explosive;
+                    const scaledRadius = GameConfig.explosion.radius * (1 + explosionLevel * 0.2);
+                    const scaledDamage = GameConfig.explosion.damage * (1 + explosionLevel * 0.2);
+                    
+                    this.scene.explosionSystem.createExplosion(
+                        this.sprite.x, 
+                        this.sprite.y, 
+                        scaledDamage,
+                        this.owner,
+                        scaledRadius
+                    );
+                }
                 this.destroy();
             });
         }
