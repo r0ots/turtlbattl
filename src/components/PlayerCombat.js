@@ -110,16 +110,26 @@ export class PlayerCombat {
             // Decrement ammo
             this.currentAmmo--;
             
-            // Check for triple shot
-            const bulletCount = this.player.stats ? this.player.stats.bulletCount : 1;
+            // Check for multi-shot
+            const bulletCount = this.player.stats ? (this.player.stats.bulletCount || 1) : 1;
             
-            if (bulletCount === 3) {
-                // Triple shot - shoot 3 bullets in a spread
-                const spreadAngle = 15 * Math.PI / 180; // 15 degrees in radians
+            if (bulletCount > 1) {
+                // Multi-shot - shoot multiple bullets in a spread cone
                 const baseAngle = Math.atan2(shootDirection.y, shootDirection.x);
+                const maxSpread = 40 * Math.PI / 180; // Maximum 40 degree spread
                 
-                for (let i = -1; i <= 1; i++) {
-                    const angle = baseAngle + (i * spreadAngle);
+                for (let i = 0; i < bulletCount; i++) {
+                    // Calculate spread angle for this bullet
+                    let spreadOffset = 0;
+                    
+                    if (bulletCount > 1) {
+                        // Distribute bullets across the cone with some randomness
+                        const evenSpread = (i - (bulletCount - 1) / 2) * (maxSpread / (bulletCount - 1));
+                        const randomSpread = (Math.random() - 0.5) * 0.15; // ±7.5 degrees random variation
+                        spreadOffset = evenSpread + randomSpread;
+                    }
+                    
+                    const angle = baseAngle + spreadOffset;
                     const dir = {
                         x: Math.cos(angle),
                         y: Math.sin(angle)
@@ -201,15 +211,15 @@ export class PlayerCombat {
         
         // Check for bullet reflection (only once at start)
         this.checkBulletReflection();
+        
+        // Perform melee hit check immediately (only once per slash)
+        this.checkMeleeHit();
     }
     
     updateMelee(delta) {
         if (!this.isSlashing) return;
         
         this.slashTime -= delta;
-        
-        // Continuously check for hits during the entire slash duration
-        this.checkMeleeHit();
         
         if (this.slashTime <= 0) {
             this.isSlashing = false;
@@ -280,20 +290,27 @@ export class PlayerCombat {
         const hit = this.collisionSystem.checkMeleeHit(this.player, nearbyPlayers);
         
         if (hit) {
-            // Apply damage (use stats if available)
-            const damage = this.player.stats ? this.player.stats.meleeDamage : GameConfig.player.melee.damage;
-            hit.target.takeDamage(damage);
-            
-            // Apply knockback
-            hit.target.sprite.body.setVelocity(hit.knockback.x, hit.knockback.y);
-            
-            // Emit melee hit event
-            this.eventBus.emit(GameEvents.MELEE_HIT, {
-                attacker: this.player,
-                target: hit.target,
-                hitPoint: hit.hitPoint,
-                damage: damage
-            });
+            // Skip if we've already hit this player during this slash
+            const playerId = hit.target.playerNumber;
+            if (!this.hitTargetsThisSlash.has(playerId)) {
+                // Mark player as hit this slash
+                this.hitTargetsThisSlash.add(playerId);
+                
+                // Apply damage (use stats if available)
+                const damage = this.player.stats ? this.player.stats.getStats().meleeDamage : GameConfig.player.melee.damage;
+                hit.target.takeDamage(damage);
+                
+                // Apply knockback
+                hit.target.sprite.body.setVelocity(hit.knockback.x, hit.knockback.y);
+                
+                // Emit melee hit event
+                this.eventBus.emit(GameEvents.MELEE_HIT, {
+                    attacker: this.player,
+                    target: hit.target,
+                    hitPoint: hit.hitPoint,
+                    damage: damage
+                });
+            }
         }
         
         // Check for crate hits

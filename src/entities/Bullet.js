@@ -1,4 +1,3 @@
-import { IsometricUtils } from '../utils/IsometricUtils';
 import { TextureFactory } from '../utils/TextureFactory';
 import { GameConfig } from '../config/GameConfig';
 
@@ -95,7 +94,7 @@ export class Bullet {
     updateDepth() {
         if (!this.sprite) return;
         
-        const depth = IsometricUtils.getDepth(this.sprite.x, this.sprite.y);
+        const depth = this.sprite.x + this.sprite.y;
         this.sprite.setDepth(depth - 1);
     }
     
@@ -119,7 +118,7 @@ export class Bullet {
             
             // Update sprite scale based on bullet size
             const scale = this.bulletSize / GameConfig.bullet.size;
-            this.sprite.setScale(scale * 0.8);
+            this.sprite.setScale(scale);
             
             // Calculate new velocity
             const length = Math.sqrt(dirX * dirX + dirY * dirY);
@@ -164,7 +163,11 @@ export class Bullet {
     
     // Check if bullet should be destroyed after hitting target count
     shouldDestroyAfterHit() {
-        return this.maxPierceTargets === 0 || this.hitTargets.size >= this.maxPierceTargets;
+        // If no piercing, destroy after first hit
+        // If piercing = 1, can hit 2 targets total (pierce through 1)
+        // If piercing = 2, can hit 3 targets total (pierce through 2), etc.
+        const maxHits = this.maxPierceTargets + 1;
+        return this.hitTargets.size >= maxHits;
     }
     
     // Set bullet as inactive (for pooling)

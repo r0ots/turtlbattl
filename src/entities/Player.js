@@ -1,4 +1,3 @@
-import { IsometricUtils } from '../utils/IsometricUtils';
 import { TextureFactory } from '../utils/TextureFactory';
 import { GameConfig } from '../config/GameConfig';
 import { EffectPool } from '../utils/EffectPool';
@@ -141,7 +140,7 @@ export class Player {
     updateDepth() {
         if (!this.sprite) return;
         
-        const depth = IsometricUtils.getDepth(this.sprite.x, this.sprite.y);
+        const depth = this.sprite.x + this.sprite.y;
         this.sprite.setDepth(depth);
     }
     

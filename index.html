@@ -37,6 +37,32 @@
             right: 20px;
             color: #2196F3;
         }
+        .stats-display {
+            position: fixed;
+            top: 60px;
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 14px;
+            line-height: 1.4;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            pointer-events: none;
+            font-family: monospace;
+            max-width: 200px;
+        }
+        #p1-stats {
+            left: 20px;
+        }
+        #p2-stats {
+            right: 20px;
+            text-align: right;
+        }
+        .stat-line {
+            margin: 2px 0;
+        }
+        .stat-upgrade {
+            color: #FFD700;
+            font-weight: bold;
+        }
         .fullscreen-hint {
             position: fixed;
             bottom: 20px;
@@ -51,7 +77,9 @@
 </head>
 <body>
     <div id="p1-score" class="score-display">P1: 0</div>
+    <div id="p1-stats" class="stats-display"></div>
     <div id="p2-score" class="score-display">P2: 0</div>
+    <div id="p2-stats" class="stats-display"></div>
     <div class="fullscreen-hint">Press F for fullscreen</div>
     <div id="game-container"></div>
     <script type="module" src="/src/main.js"></script>

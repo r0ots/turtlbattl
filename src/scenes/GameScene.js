@@ -1,10 +1,9 @@
 import Phaser from 'phaser';
 import { Player } from '../entities/Player';
-import { Bullet } from '../entities/Bullet';
 import { Crate } from '../entities/Crate';
 import { Wall } from '../entities/Wall';
-import { IsometricUtils } from '../utils/IsometricUtils';
 import { GameConfig } from '../config/GameConfig';
+import { CRATE_PATTERNS, WALL_PATTERNS } from '../config/GamePatterns';
 import { GameStateManager } from '../managers/GameStateManager';
 import { SoundManager } from '../managers/SoundManager';
 import { EventBus } from '../events/EventBus';
@@ -13,6 +12,7 @@ import { CollisionSystem } from '../systems/CollisionSystem';
 import { BulletPool } from '../systems/BulletPool';
 import { PlayerStats } from '../systems/PlayerStats';
 import { ExplosionSystem } from '../systems/ExplosionSystem';
+import { PatternPlacer } from '../utils/PatternPlacer';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -95,6 +95,9 @@ export default class GameScene extends Phaser.Scene {
             
             // Initialize bullet pool after physics groups are ready
             this.bulletPool = new BulletPool(this);
+            
+            // Initialize pattern placer after scene is fully ready
+            this.patternPlacer = new PatternPlacer(this);
             
             this.createArena();
             this.createPlayers();
@@ -181,6 +184,11 @@ export default class GameScene extends Phaser.Scene {
             
             this.playerGroup.add(player1.sprite);
             this.playerGroup.add(player2.sprite);
+            
+            // Pass players to GameStateManager for stats tracking
+            if (this.gameState) {
+                this.gameState.setPlayers(this.players);
+            }
         } catch (error) {
             console.error('Failed to create players:', error);
         }
@@ -189,182 +197,25 @@ export default class GameScene extends Phaser.Scene {
     createCrates() {
         try {
             const config = GameConfig.crate;
-            const width = this.cameras.main.width;
-            const height = this.cameras.main.height;
-            const gridSize = GameConfig.arena.gridSize;
-            const margin = GameConfig.arena.margin;
-            
-            // Define crate arrangement patterns
-            const patterns = [
-                // Single crate
-                { name: 'single', blocks: [{x: 0, y: 0}] },
-                
-                // Two crates
-                { name: 'two_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}] },
-                { name: 'two_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}] },
-                
-                // Three crates
-                { name: 'three_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}] },
-                { name: 'three_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}] },
-                { name: 'L_bl', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}] },
-                { name: 'L_br', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 1, y: 1}] },
-                { name: 'L_tl', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}] },
-                { name: 'L_tr', blocks: [{x: 0, y: 1}, {x: 1, y: 0}, {x: 1, y: 1}] },
-                
-                // Four crates
-                { name: 'four_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}] },
-                { name: 'four_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 0, y: 3}] },
-                { name: 'four_2x2', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}] },
-                { name: 'four_T_up', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 1, y: 1}] },
-                { name: 'four_T_down', blocks: [{x: 1, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 2, y: 1}] },
-                { name: 'four_T_left', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 1}] },
-                { name: 'four_T_right', blocks: [{x: 1, y: 0}, {x: 1, y: 1}, {x: 1, y: 2}, {x: 0, y: 1}] },
-                { name: 'four_Z_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 1, y: 1}, {x: 2, y: 1}] },
-                { name: 'four_Z_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 1, y: 2}] },
-                { name: 'four_S_h', blocks: [{x: 1, y: 0}, {x: 2, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}] },
-                { name: 'four_S_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 1, y: 2}] },
-                
-                // Five crates
-                { name: 'five_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}, {x: 4, y: 0}] },
-                { name: 'five_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 0, y: 3}, {x: 0, y: 4}] },
-                { name: 'five_plus', blocks: [{x: 1, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 2, y: 1}, {x: 1, y: 2}] },
-                { name: 'five_T_up', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 1, y: 1}, {x: 1, y: 2}] },
-                { name: 'five_T_down', blocks: [{x: 1, y: 0}, {x: 1, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 2}] },
-                { name: 'five_T_left', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 1}, {x: 2, y: 1}] },
-                { name: 'five_T_right', blocks: [{x: 2, y: 0}, {x: 2, y: 1}, {x: 2, y: 2}, {x: 1, y: 1}, {x: 0, y: 1}] },
-                { name: 'five_L_bl', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 2}] },
-                { name: 'five_L_br', blocks: [{x: 2, y: 0}, {x: 2, y: 1}, {x: 2, y: 2}, {x: 0, y: 2}, {x: 1, y: 2}] },
-                { name: 'five_L_tl', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}] },
-                { name: 'five_L_tr', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 2, y: 1}, {x: 2, y: 2}] },
-                { name: 'five_U_up', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 2, y: 1}, {x: 2, y: 0}] },
-                { name: 'five_U_down', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 0, y: 1}, {x: 2, y: 1}] },
-                { name: 'five_U_left', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}] },
-                { name: 'five_U_right', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 1, y: 1}, {x: 1, y: 2}, {x: 0, y: 2}] },
-                
-                // Six crates
-                { name: 'six_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}, {x: 4, y: 0}, {x: 5, y: 0}] },
-                { name: 'six_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 0, y: 3}, {x: 0, y: 4}, {x: 0, y: 5}] },
-                { name: 'six_2x3_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 2, y: 1}] },
-                { name: 'six_3x2_v', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}] },
-                { name: 'six_L_large_bl', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 2}, {x: 3, y: 2}] },
-                { name: 'six_L_large_br', blocks: [{x: 3, y: 0}, {x: 3, y: 1}, {x: 3, y: 2}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 2}] },
-                { name: 'six_L_large_tl', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}] },
-                { name: 'six_L_large_tr', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}, {x: 3, y: 1}, {x: 3, y: 2}] },
-                { name: 'six_C_up', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 1, y: 2}] },
-                { name: 'six_C_down', blocks: [{x: 1, y: 0}, {x: 0, y: 1}, {x: 2, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 2}] },
-                { name: 'six_C_left', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 1}] },
-                { name: 'six_C_right', blocks: [{x: 1, y: 0}, {x: 2, y: 0}, {x: 2, y: 1}, {x: 2, y: 2}, {x: 1, y: 2}, {x: 0, y: 1}] },
-                { name: 'six_T_large_up', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}, {x: 1, y: 1}, {x: 2, y: 1}] },
-                { name: 'six_T_large_down', blocks: [{x: 1, y: 0}, {x: 2, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 2, y: 1}, {x: 3, y: 1}] },
-                { name: 'six_Z_large', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 1, y: 1}, {x: 2, y: 1}, {x: 2, y: 2}, {x: 3, y: 2}] },
-                { name: 'six_S_large', blocks: [{x: 2, y: 0}, {x: 3, y: 0}, {x: 1, y: 1}, {x: 2, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}] }
-            ];
-            
-            // Calculate grid positions
-            const gridCols = Math.floor((width - margin * 2) / gridSize);
-            const gridRows = Math.floor((height - margin * 2) / gridSize);
             
             // Track occupied grid positions (shared with walls)
             const occupiedGrid = new Set();
             this.globalOccupiedGrid = occupiedGrid; // Store for wall creation
             
-            // Player spawn grid positions to avoid
-            const playerGridPositions = [
-                { x: Math.floor(gridCols * 0.25), y: Math.floor(gridRows * 0.5) },
-                { x: Math.floor(gridCols * 0.75), y: Math.floor(gridRows * 0.5) }
-            ];
-            
-            // Mark player spawn areas as occupied (3x3 area around spawn)
-            for (const playerPos of playerGridPositions) {
-                for (let dx = -3; dx <= 3; dx++) {
-                    for (let dy = -3; dy <= 3; dy++) {
-                        occupiedGrid.add(`${playerPos.x + dx},${playerPos.y + dy}`);
-                    }
-                }
-            }
-            
-            // Keep spawning arrangements until we have enough crate tiles
-            let totalCrateTiles = 0;
-            const targetMinTiles = GameConfig.crate.minTiles;
-            const targetMaxTiles = GameConfig.crate.maxTiles;
-            let arrangementCount = 0;
-            const maxArrangements = 50; // Safety limit
-            
-            while (totalCrateTiles < targetMinTiles && arrangementCount < maxArrangements) {
-                // Pick random pattern, prefer larger patterns if we need more tiles
-                let pattern;
-                if (totalCrateTiles < targetMinTiles) {
-                    // When we need more tiles, bias towards larger patterns
-                    const largePatterns = patterns.filter(p => p.blocks.length >= 4);
-                    const allPatterns = patterns;
-                    const patternPool = totalCrateTiles < targetMinTiles / 2 ? largePatterns.concat(allPatterns) : allPatterns;
-                    pattern = patternPool[Math.floor(Math.random() * patternPool.length)];
-                } else {
-                    pattern = patterns[Math.floor(Math.random() * patterns.length)];
-                }
-                
-                // Skip if this would exceed max tiles
-                if (totalCrateTiles + pattern.blocks.length > targetMaxTiles) {
-                    // Try to find a smaller pattern that fits
-                    const fittingPatterns = patterns.filter(p => totalCrateTiles + p.blocks.length <= targetMaxTiles);
-                    if (fittingPatterns.length === 0) break; // No patterns fit
-                    pattern = fittingPatterns[Math.floor(Math.random() * fittingPatterns.length)];
-                }
-                
-                // Try to find valid position for this pattern
-                let placed = false;
-                let attempts = 0;
-                
-                while (!placed && attempts < 50) {
-                    // Random grid position
-                    const gridX = Math.floor(Math.random() * (gridCols - 3)) + 1;
-                    const gridY = Math.floor(Math.random() * (gridRows - 3)) + 1;
-                    
-                    // Check if all blocks in pattern can be placed
-                    let canPlace = true;
-                    for (const block of pattern.blocks) {
-                        const checkX = gridX + block.x;
-                        const checkY = gridY + block.y;
-                        const key = `${checkX},${checkY}`;
-                        
-                        if (occupiedGrid.has(key) || checkX >= gridCols || checkY >= gridRows) {
-                            canPlace = false;
-                            break;
-                        }
-                    }
-                    
-                    if (canPlace) {
-                        // Place all crates in the pattern
-                        for (const block of pattern.blocks) {
-                            const crateGridX = gridX + block.x;
-                            const crateGridY = gridY + block.y;
-                            
-                            // Convert grid position to world position
-                            const worldX = margin + crateGridX * gridSize + gridSize/2;
-                            const worldY = margin + crateGridY * gridSize + gridSize/2;
-                            
-                            // Create crate
-                            const crate = new Crate(this, worldX, worldY);
-                            this.crates.push(crate);
-                            
-                            // Add to physics group
-                            this.crateGroup.add(crate.sprite, true);
-                            crate.sprite.body.setSize(config.size, config.size);
-                            
-                            // Mark grid position as occupied
-                            occupiedGrid.add(`${crateGridX},${crateGridY}`);
-                        }
-                        
-                        placed = true;
-                        totalCrateTiles += pattern.blocks.length;
-                        arrangementCount++;
-                    }
-                    
-                    attempts++;
-                }
-            }
-            
-            console.log(`Created ${totalCrateTiles} crate tiles in ${arrangementCount} arrangements (target: ${targetMinTiles}-${targetMaxTiles})`);
+            // Use pattern placer to handle all placement logic
+            this.patternPlacer.placePatterns({
+                patterns: CRATE_PATTERNS,
+                minTiles: config.minTiles,
+                maxTiles: config.maxTiles,
+                occupiedGrid,
+                createEntity: (x, y) => new Crate(this, x, y),
+                addToGroup: (crate) => {
+                    this.crateGroup.add(crate.sprite, true);
+                    crate.sprite.body.setSize(config.size, config.size);
+                },
+                entities: this.crates,
+                entityType: 'crate'
+            });
         } catch (error) {
             console.error('Failed to create crates:', error);
         }
@@ -373,67 +224,6 @@ export default class GameScene extends Phaser.Scene {
     createWalls() {
         try {
             const config = GameConfig.wall;
-            const width = this.cameras.main.width;
-            const height = this.cameras.main.height;
-            const gridSize = GameConfig.arena.gridSize;
-            const margin = GameConfig.arena.margin;
-            
-            // Define wall arrangement patterns
-            const patterns = [
-                // Single walls
-                { name: 'single_h', blocks: [{x: 0, y: 0, orientation: 'horizontal'}] },
-                { name: 'single_v', blocks: [{x: 0, y: 0, orientation: 'vertical'}] },
-                
-                // Long horizontal walls (2-10 segments)
-                { name: 'wall_h_2', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}] },
-                { name: 'wall_h_3', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}] },
-                { name: 'wall_h_4', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}] },
-                { name: 'wall_h_5', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}] },
-                { name: 'wall_h_6', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 5, y: 0, orientation: 'horizontal'}] },
-                { name: 'wall_h_7', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 5, y: 0, orientation: 'horizontal'}, {x: 6, y: 0, orientation: 'horizontal'}] },
-                { name: 'wall_h_8', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 5, y: 0, orientation: 'horizontal'}, {x: 6, y: 0, orientation: 'horizontal'}, {x: 7, y: 0, orientation: 'horizontal'}] },
-                { name: 'wall_h_10', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 5, y: 0, orientation: 'horizontal'}, {x: 6, y: 0, orientation: 'horizontal'}, {x: 7, y: 0, orientation: 'horizontal'}, {x: 8, y: 0, orientation: 'horizontal'}, {x: 9, y: 0, orientation: 'horizontal'}] },
-                
-                // Long vertical walls (2-10 segments)
-                { name: 'wall_v_2', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}] },
-                { name: 'wall_v_3', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}] },
-                { name: 'wall_v_4', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}] },
-                { name: 'wall_v_5', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}] },
-                { name: 'wall_v_6', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}, {x: 0, y: 5, orientation: 'vertical'}] },
-                { name: 'wall_v_7', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}, {x: 0, y: 5, orientation: 'vertical'}, {x: 0, y: 6, orientation: 'vertical'}] },
-                { name: 'wall_v_8', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}, {x: 0, y: 5, orientation: 'vertical'}, {x: 0, y: 6, orientation: 'vertical'}, {x: 0, y: 7, orientation: 'vertical'}] },
-                { name: 'wall_v_10', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}, {x: 0, y: 5, orientation: 'vertical'}, {x: 0, y: 6, orientation: 'vertical'}, {x: 0, y: 7, orientation: 'vertical'}, {x: 0, y: 8, orientation: 'vertical'}, {x: 0, y: 9, orientation: 'vertical'}] },
-                
-                // Parallel walls (creating corridors)
-                { name: 'corridor_h_3', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 0, y: 2, orientation: 'horizontal'}, {x: 1, y: 2, orientation: 'horizontal'}, {x: 2, y: 2, orientation: 'horizontal'}] },
-                { name: 'corridor_v_3', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 2, y: 0, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}, {x: 2, y: 2, orientation: 'vertical'}] },
-                { name: 'corridor_h_5', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 0, y: 2, orientation: 'horizontal'}, {x: 1, y: 2, orientation: 'horizontal'}, {x: 2, y: 2, orientation: 'horizontal'}, {x: 3, y: 2, orientation: 'horizontal'}, {x: 4, y: 2, orientation: 'horizontal'}] },
-                { name: 'corridor_v_5', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}, {x: 0, y: 4, orientation: 'vertical'}, {x: 2, y: 0, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}, {x: 2, y: 2, orientation: 'vertical'}, {x: 2, y: 3, orientation: 'vertical'}, {x: 2, y: 4, orientation: 'vertical'}] },
-                
-                // L-shapes (no overlapping corners)
-                { name: 'L_small_br', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}] },
-                { name: 'L_small_bl', blocks: [{x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}] },
-                { name: 'L_small_tr', blocks: [{x: 0, y: 1, orientation: 'horizontal'}, {x: 1, y: 1, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}] },
-                { name: 'L_small_tl', blocks: [{x: 1, y: 1, orientation: 'horizontal'}, {x: 2, y: 1, orientation: 'horizontal'}, {x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}] },
-                
-                // Large L-shapes
-                { name: 'L_large_br', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'vertical'}, {x: 4, y: 1, orientation: 'vertical'}, {x: 4, y: 2, orientation: 'vertical'}, {x: 4, y: 3, orientation: 'vertical'}] },
-                { name: 'L_large_bl', blocks: [{x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 3, y: 0, orientation: 'horizontal'}, {x: 4, y: 0, orientation: 'horizontal'}, {x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 0, y: 3, orientation: 'vertical'}] },
-                
-                // Rooms (no overlapping corners)
-                { name: 'room_small', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 0, y: 2, orientation: 'horizontal'}, {x: 1, y: 2, orientation: 'horizontal'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}] },
-                { name: 'room_medium', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 0, y: 3, orientation: 'horizontal'}, {x: 1, y: 3, orientation: 'horizontal'}, {x: 2, y: 3, orientation: 'horizontal'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 3, y: 1, orientation: 'vertical'}, {x: 3, y: 2, orientation: 'vertical'}] },
-                
-                // T-shapes
-                { name: 'T_up', blocks: [{x: 0, y: 0, orientation: 'horizontal'}, {x: 1, y: 0, orientation: 'horizontal'}, {x: 2, y: 0, orientation: 'horizontal'}, {x: 1, y: 1, orientation: 'vertical'}, {x: 1, y: 2, orientation: 'vertical'}] },
-                { name: 'T_down', blocks: [{x: 1, y: 0, orientation: 'vertical'}, {x: 1, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'horizontal'}, {x: 1, y: 2, orientation: 'horizontal'}, {x: 2, y: 2, orientation: 'horizontal'}] },
-                { name: 'T_left', blocks: [{x: 0, y: 0, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'vertical'}, {x: 0, y: 2, orientation: 'vertical'}, {x: 1, y: 1, orientation: 'horizontal'}, {x: 2, y: 1, orientation: 'horizontal'}] },
-                { name: 'T_right', blocks: [{x: 2, y: 0, orientation: 'vertical'}, {x: 2, y: 1, orientation: 'vertical'}, {x: 2, y: 2, orientation: 'vertical'}, {x: 0, y: 1, orientation: 'horizontal'}, {x: 1, y: 1, orientation: 'horizontal'}] }
-            ];
-            
-            // Calculate grid positions
-            const gridCols = Math.floor((width - margin * 2) / gridSize);
-            const gridRows = Math.floor((height - margin * 2) / gridSize);
             
             // Use the same occupied grid from crate creation to prevent overlap
             const occupiedGrid = this.globalOccupiedGrid || new Set();
@@ -441,124 +231,36 @@ export default class GameScene extends Phaser.Scene {
             // If this is the first time, mark crate positions as occupied
             if (!this.globalOccupiedGrid) {
                 for (const crate of this.crates) {
-                    const crateGridX = Math.floor((crate.x - margin) / gridSize);
-                    const crateGridY = Math.floor((crate.y - margin) / gridSize);
+                    const crateGridX = Math.floor((crate.x - this.patternPlacer.margin) / this.patternPlacer.gridSize);
+                    const crateGridY = Math.floor((crate.y - this.patternPlacer.margin) / this.patternPlacer.gridSize);
                     occupiedGrid.add(`${crateGridX},${crateGridY}`);
                 }
                 this.globalOccupiedGrid = occupiedGrid;
             }
             
-            // Player spawn grid positions to avoid
-            const playerGridPositions = [
-                { x: Math.floor(gridCols * 0.25), y: Math.floor(gridRows * 0.5) },
-                { x: Math.floor(gridCols * 0.75), y: Math.floor(gridRows * 0.5) }
-            ];
-            
-            // Mark player spawn areas as occupied (larger area for walls)
-            for (const playerPos of playerGridPositions) {
-                for (let dx = -4; dx <= 4; dx++) {
-                    for (let dy = -4; dy <= 4; dy++) {
-                        occupiedGrid.add(`${playerPos.x + dx},${playerPos.y + dy}`);
-                    }
-                }
-            }
-            
-            // Keep spawning arrangements until we have enough wall tiles
-            let totalWallTiles = 0;
-            const targetMinTiles = config.minTiles;
-            const targetMaxTiles = config.maxTiles;
-            let arrangementCount = 0;
-            const maxArrangements = 50; // Safety limit
-            
-            while (totalWallTiles < targetMinTiles && arrangementCount < maxArrangements) {
-                // Pick random pattern, prefer larger patterns if we need more tiles
-                let pattern;
-                if (totalWallTiles < targetMinTiles) {
-                    // When we need more tiles, bias towards larger patterns
-                    const largePatterns = patterns.filter(p => p.blocks.length >= 5);
-                    const allPatterns = patterns;
-                    const patternPool = totalWallTiles < targetMinTiles / 2 ? largePatterns.concat(allPatterns) : allPatterns;
-                    pattern = patternPool[Math.floor(Math.random() * patternPool.length)];
-                } else {
-                    pattern = patterns[Math.floor(Math.random() * patterns.length)];
-                }
-                
-                // Skip if this would exceed max tiles
-                if (totalWallTiles + pattern.blocks.length > targetMaxTiles) {
-                    // Try to find a smaller pattern that fits
-                    const fittingPatterns = patterns.filter(p => totalWallTiles + p.blocks.length <= targetMaxTiles);
-                    if (fittingPatterns.length === 0) break; // No patterns fit
-                    pattern = fittingPatterns[Math.floor(Math.random() * fittingPatterns.length)];
-                }
-                
-                // Try to find valid position for this pattern
-                let placed = false;
-                let attempts = 0;
-                
-                while (!placed && attempts < 50) {
-                    // Random grid position
-                    const gridX = Math.floor(Math.random() * (gridCols - 4)) + 2;
-                    const gridY = Math.floor(Math.random() * (gridRows - 4)) + 2;
+            // Use pattern placer to handle all placement logic
+            this.patternPlacer.placePatterns({
+                patterns: WALL_PATTERNS,
+                minTiles: config.minTiles,
+                maxTiles: config.maxTiles,
+                occupiedGrid,
+                createEntity: (x, y, orientation) => new Wall(this, x, y, orientation),
+                addToGroup: (wall) => {
+                    this.wallGroup.add(wall.sprite, true);
                     
-                    // Check if all blocks in pattern can be placed
-                    let canPlace = true;
-                    for (const block of pattern.blocks) {
-                        const checkX = gridX + block.x;
-                        const checkY = gridY + block.y;
-                        // Check both wall-specific key and general position key
-                        const wallKey = `${checkX},${checkY},${block.orientation}`;
-                        const generalKey = `${checkX},${checkY}`;
-                        
-                        if (occupiedGrid.has(wallKey) || occupiedGrid.has(generalKey) || checkX >= gridCols || checkY >= gridRows) {
-                            canPlace = false;
-                            break;
-                        }
+                    // Set collision size based on orientation
+                    if (wall.orientation === 'horizontal') {
+                        wall.sprite.body.setSize(config.width, config.height);
+                    } else {
+                        // Vertical walls: only the right half of the grid cell
+                        const halfWidth = config.width / 2;
+                        wall.sprite.body.setSize(halfWidth, config.height);
+                        wall.sprite.body.setOffset(halfWidth, 0);
                     }
-                    
-                    if (canPlace) {
-                        // Place all walls in the pattern
-                        for (const block of pattern.blocks) {
-                            const wallGridX = gridX + block.x;
-                            const wallGridY = gridY + block.y;
-                            
-                            // Convert grid position to world position
-                            const worldX = margin + wallGridX * gridSize + gridSize/2;
-                            const worldY = margin + wallGridY * gridSize + gridSize/2;
-                            
-                            // Create wall
-                            const wall = new Wall(this, worldX, worldY, block.orientation);
-                            this.walls.push(wall);
-                            
-                            // Add to physics group
-                            this.wallGroup.add(wall.sprite, true);
-                            
-                            // Set collision size based on orientation
-                            if (block.orientation === 'horizontal') {
-                                // Horizontal walls: full width and height
-                                wall.sprite.body.setSize(config.width, config.height);
-                            } else {
-                                // Vertical walls: only the right half of the grid cell
-                                const halfWidth = config.width / 2;
-                                wall.sprite.body.setSize(halfWidth, config.height);
-                                // Offset the collision body to the right half
-                                wall.sprite.body.setOffset(halfWidth, 0);
-                            }
-                            
-                            // Mark grid position as occupied (with orientation for walls, and basic position for crate overlap prevention)
-                            occupiedGrid.add(`${wallGridX},${wallGridY},${block.orientation}`); // Specific to wall orientation
-                            occupiedGrid.add(`${wallGridX},${wallGridY}`); // General position to prevent crate overlap
-                        }
-                        
-                        placed = true;
-                        totalWallTiles += pattern.blocks.length;
-                        arrangementCount++;
-                    }
-                    
-                    attempts++;
-                }
-            }
-            
-            console.log(`Created ${totalWallTiles} wall tiles in ${arrangementCount} arrangements (target: ${targetMinTiles}-${targetMaxTiles})`);
+                },
+                entities: this.walls,
+                entityType: 'wall'
+            });
         } catch (error) {
             console.error('Failed to create walls:', error);
         }
@@ -853,6 +555,14 @@ export default class GameScene extends Phaser.Scene {
                 this.bulletPool.optimizePool();
                 this.lastPoolOptimization = time;
             }
+            
+            // Update stats display periodically (every 500ms)
+            if (!this.lastStatsUpdate || time - this.lastStatsUpdate > 500) {
+                if (this.gameState) {
+                    this.gameState.updateStatsUI();
+                }
+                this.lastStatsUpdate = time;
+            }
         } catch (error) {
             console.error('Error during update:', error);
         }
@@ -949,6 +659,12 @@ export default class GameScene extends Phaser.Scene {
     
     onUpgradesComplete(selectedUpgrades, winner) {
         console.log(`DEBUG: Both players completed upgrade selection:`, selectedUpgrades);
+        
+        // Update stats display after upgrades
+        if (this.gameState) {
+            this.gameState.updateStatsUI();
+        }
+        
         this.endRound(winner);
     }
     
@@ -966,17 +682,10 @@ export default class GameScene extends Phaser.Scene {
     
     resetRound() {
         try {
-            // Use bullet pool to efficiently clean up bullets
-            this.bullets.forEach(bullet => {
-                if (bullet && !bullet.isDestroyed) {
-                    bullet.destroy();
-                }
-            });
-            this.bullets = [];
-            this.bulletGroup.clear(true, false); // Don't destroy sprites, pool will handle them
-            
-            // Release all bullets back to pool
+            // Properly release bullets through pool system to prevent memory leaks
             this.bulletPool.releaseAllBullets();
+            this.bullets = [];
+            this.bulletGroup.clear(true, false); // Don't destroy sprites, pool handles them
             
             // Reset global occupied grid
             this.globalOccupiedGrid = null;

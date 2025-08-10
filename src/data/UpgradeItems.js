@@ -21,10 +21,11 @@ export const UpgradeItems = {
     TRIPLE_SHOT: {
         id: 'triple_shot',
         name: 'Triple Shot',
-        description: 'Shoot 3 bullets',
+        description: '+2 more bullets',
         category: 'offensive',
         effect: (stats) => {
-            stats.bulletCount = 3;
+            // Add 2 bullets each time (1 -> 3 -> 5 -> 7...)
+            stats.bulletCount = (stats.bulletCount || 1) + 2;
         }
     },
     PIERCING: {

@@ -176,7 +176,7 @@ export class PlayerUI {
             this.dashIndicator.y = this.sprite.y - config.offsetY - GameConfig.ui.dashIndicator.offsetY;
             
             const maxCharges = this.player.stats ? this.player.stats.dashCharges : 1;
-            const currentCharges = this.player.movement.currentDashCharges;
+            const currentCharges = this.player.movement?.currentDashCharges || 0;
             
             // Show charges as percentage
             const chargePercent = currentCharges / maxCharges;
@@ -229,8 +229,9 @@ export class PlayerUI {
             bullet.x = this.sprite.x + offsetX;
             bullet.y = this.sprite.y + offsetY;
             
-            // Show/hide based on current ammo
-            if (i < this.player.combat.currentAmmo) {
+            // Show/hide based on current ammo (with null check)
+            const currentAmmo = this.player.combat?.currentAmmo || 0;
+            if (i < currentAmmo) {
                 bullet.setVisible(true);
                 bullet.setAlpha(1);
             } else {
