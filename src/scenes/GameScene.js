@@ -183,68 +183,156 @@ export default class GameScene extends Phaser.Scene {
             const config = GameConfig.crate;
             const width = this.cameras.main.width;
             const height = this.cameras.main.height;
-            const arenaWidth = width - (GameConfig.arena.margin * 2);
-            const arenaHeight = height - (GameConfig.arena.margin * 2);
+            const gridSize = GameConfig.arena.gridSize;
+            const margin = GameConfig.arena.margin;
             
-            // Random number of crates
-            const crateCount = Math.floor(Math.random() * (config.maxCrates - config.minCrates + 1)) + config.minCrates;
-            
-            // Player spawn positions to avoid (use dynamic positions)
-            const playerSpawns = [
-                { x: width * 0.25, y: height * 0.5 },
-                { x: width * 0.75, y: height * 0.5 }
+            // Define crate arrangement patterns
+            const patterns = [
+                // Single crate
+                { name: 'single', blocks: [{x: 0, y: 0}] },
+                
+                // Two crates
+                { name: 'two_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}] },
+                { name: 'two_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}] },
+                
+                // Three crates
+                { name: 'three_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}] },
+                { name: 'three_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}] },
+                { name: 'L_bl', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}] },
+                { name: 'L_br', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 1, y: 1}] },
+                { name: 'L_tl', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}] },
+                { name: 'L_tr', blocks: [{x: 0, y: 1}, {x: 1, y: 0}, {x: 1, y: 1}] },
+                
+                // Four crates
+                { name: 'four_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}] },
+                { name: 'four_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 0, y: 3}] },
+                { name: 'four_2x2', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}] },
+                { name: 'four_T_up', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 1, y: 1}] },
+                { name: 'four_T_down', blocks: [{x: 1, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 2, y: 1}] },
+                { name: 'four_T_left', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 1}] },
+                { name: 'four_T_right', blocks: [{x: 1, y: 0}, {x: 1, y: 1}, {x: 1, y: 2}, {x: 0, y: 1}] },
+                { name: 'four_Z_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 1, y: 1}, {x: 2, y: 1}] },
+                { name: 'four_Z_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 1, y: 2}] },
+                { name: 'four_S_h', blocks: [{x: 1, y: 0}, {x: 2, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}] },
+                { name: 'four_S_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 1, y: 2}] },
+                
+                // Five crates
+                { name: 'five_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}, {x: 4, y: 0}] },
+                { name: 'five_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 0, y: 3}, {x: 0, y: 4}] },
+                { name: 'five_plus', blocks: [{x: 1, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 2, y: 1}, {x: 1, y: 2}] },
+                { name: 'five_T_up', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 1, y: 1}, {x: 1, y: 2}] },
+                { name: 'five_T_down', blocks: [{x: 1, y: 0}, {x: 1, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 2}] },
+                { name: 'five_T_left', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 1}, {x: 2, y: 1}] },
+                { name: 'five_T_right', blocks: [{x: 2, y: 0}, {x: 2, y: 1}, {x: 2, y: 2}, {x: 1, y: 1}, {x: 0, y: 1}] },
+                { name: 'five_L_bl', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 2}] },
+                { name: 'five_L_br', blocks: [{x: 2, y: 0}, {x: 2, y: 1}, {x: 2, y: 2}, {x: 0, y: 2}, {x: 1, y: 2}] },
+                { name: 'five_L_tl', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}] },
+                { name: 'five_L_tr', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 2, y: 1}, {x: 2, y: 2}] },
+                { name: 'five_U_up', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 2, y: 1}, {x: 2, y: 0}] },
+                { name: 'five_U_down', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 0, y: 1}, {x: 2, y: 1}] },
+                { name: 'five_U_left', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}] },
+                { name: 'five_U_right', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 1, y: 1}, {x: 1, y: 2}, {x: 0, y: 2}] },
+                
+                // Six crates
+                { name: 'six_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}, {x: 4, y: 0}, {x: 5, y: 0}] },
+                { name: 'six_v', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 0, y: 3}, {x: 0, y: 4}, {x: 0, y: 5}] },
+                { name: 'six_2x3_h', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 2, y: 1}] },
+                { name: 'six_3x2_v', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}] },
+                { name: 'six_L_large_bl', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 2}, {x: 3, y: 2}] },
+                { name: 'six_L_large_br', blocks: [{x: 3, y: 0}, {x: 3, y: 1}, {x: 3, y: 2}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 2}] },
+                { name: 'six_L_large_tl', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}] },
+                { name: 'six_L_large_tr', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}, {x: 3, y: 1}, {x: 3, y: 2}] },
+                { name: 'six_C_up', blocks: [{x: 0, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 1, y: 2}] },
+                { name: 'six_C_down', blocks: [{x: 1, y: 0}, {x: 0, y: 1}, {x: 2, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 2}] },
+                { name: 'six_C_left', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 0, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}, {x: 2, y: 1}] },
+                { name: 'six_C_right', blocks: [{x: 1, y: 0}, {x: 2, y: 0}, {x: 2, y: 1}, {x: 2, y: 2}, {x: 1, y: 2}, {x: 0, y: 1}] },
+                { name: 'six_T_large_up', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 2, y: 0}, {x: 3, y: 0}, {x: 1, y: 1}, {x: 2, y: 1}] },
+                { name: 'six_T_large_down', blocks: [{x: 1, y: 0}, {x: 2, y: 0}, {x: 0, y: 1}, {x: 1, y: 1}, {x: 2, y: 1}, {x: 3, y: 1}] },
+                { name: 'six_Z_large', blocks: [{x: 0, y: 0}, {x: 1, y: 0}, {x: 1, y: 1}, {x: 2, y: 1}, {x: 2, y: 2}, {x: 3, y: 2}] },
+                { name: 'six_S_large', blocks: [{x: 2, y: 0}, {x: 3, y: 0}, {x: 1, y: 1}, {x: 2, y: 1}, {x: 0, y: 2}, {x: 1, y: 2}] }
             ];
             
-            for (let i = 0; i < crateCount; i++) {
-                let validPosition = false;
-                let x, y;
+            // Calculate grid positions
+            const gridCols = Math.floor((width - margin * 2) / gridSize);
+            const gridRows = Math.floor((height - margin * 2) / gridSize);
+            
+            // Track occupied grid positions
+            const occupiedGrid = new Set();
+            
+            // Player spawn grid positions to avoid
+            const playerGridPositions = [
+                { x: Math.floor(gridCols * 0.25), y: Math.floor(gridRows * 0.5) },
+                { x: Math.floor(gridCols * 0.75), y: Math.floor(gridRows * 0.5) }
+            ];
+            
+            // Mark player spawn areas as occupied (3x3 area around spawn)
+            for (const playerPos of playerGridPositions) {
+                for (let dx = -3; dx <= 3; dx++) {
+                    for (let dy = -3; dy <= 3; dy++) {
+                        occupiedGrid.add(`${playerPos.x + dx},${playerPos.y + dy}`);
+                    }
+                }
+            }
+            
+            // Random number of arrangements to place
+            const arrangementCount = Math.floor(Math.random() * 5) + 3; // 3-7 arrangements
+            
+            for (let i = 0; i < arrangementCount; i++) {
+                // Pick random pattern
+                const pattern = patterns[Math.floor(Math.random() * patterns.length)];
+                
+                // Try to find valid position for this pattern
+                let placed = false;
                 let attempts = 0;
                 
-                // Try to find a valid position
-                while (!validPosition && attempts < 50) {
-                    x = GameConfig.arena.margin + config.spawnMargin + 
-                        Math.random() * (arenaWidth - config.spawnMargin * 2);
-                    y = GameConfig.arena.margin + config.spawnMargin + 
-                        Math.random() * (arenaHeight - config.spawnMargin * 2);
+                while (!placed && attempts < 50) {
+                    // Random grid position
+                    const gridX = Math.floor(Math.random() * (gridCols - 3)) + 1;
+                    const gridY = Math.floor(Math.random() * (gridRows - 3)) + 1;
                     
-                    validPosition = true;
-                    
-                    // Check distance from player spawns
-                    for (const spawn of playerSpawns) {
-                        const dist = Math.sqrt(
-                            Math.pow(x - spawn.x, 2) + Math.pow(y - spawn.y, 2)
-                        );
-                        if (dist < config.minDistanceFromPlayer) {
-                            validPosition = false;
+                    // Check if all blocks in pattern can be placed
+                    let canPlace = true;
+                    for (const block of pattern.blocks) {
+                        const checkX = gridX + block.x;
+                        const checkY = gridY + block.y;
+                        const key = `${checkX},${checkY}`;
+                        
+                        if (occupiedGrid.has(key) || checkX >= gridCols || checkY >= gridRows) {
+                            canPlace = false;
                             break;
                         }
                     }
                     
-                    // Check distance from other crates
-                    for (const crate of this.crates) {
-                        const dist = Math.sqrt(
-                            Math.pow(x - crate.x, 2) + Math.pow(y - crate.y, 2)
-                        );
-                        if (dist < config.size * 1.5) {
-                            validPosition = false;
-                            break;
+                    if (canPlace) {
+                        // Place all crates in the pattern
+                        for (const block of pattern.blocks) {
+                            const crateGridX = gridX + block.x;
+                            const crateGridY = gridY + block.y;
+                            
+                            // Convert grid position to world position
+                            const worldX = margin + crateGridX * gridSize + gridSize/2;
+                            const worldY = margin + crateGridY * gridSize + gridSize/2;
+                            
+                            // Create crate
+                            const crate = new Crate(this, worldX, worldY);
+                            this.crates.push(crate);
+                            
+                            // Add to physics group
+                            this.crateGroup.add(crate.sprite, true);
+                            crate.sprite.body.setSize(config.size, config.size);
+                            
+                            // Mark grid position as occupied
+                            occupiedGrid.add(`${crateGridX},${crateGridY}`);
                         }
+                        
+                        placed = true;
                     }
                     
                     attempts++;
                 }
-                
-                if (validPosition) {
-                    const crate = new Crate(this, x, y);
-                    this.crates.push(crate);
-                    // Add to static group and set proper physics body
-                    this.crateGroup.add(crate.sprite, true);
-                    // Set the collision box size
-                    crate.sprite.body.setSize(GameConfig.crate.size, GameConfig.crate.size);
-                }
             }
             
-            console.log(`Created ${this.crates.length} crates`);
+            console.log(`Created ${this.crates.length} crates in ${arrangementCount} arrangements`);
         } catch (error) {
             console.error('Failed to create crates:', error);
         }

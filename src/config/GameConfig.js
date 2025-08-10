@@ -170,7 +170,7 @@ export const GameConfig = {
     
     crate: {
         health: 50,           // Takes 2 bullet hits
-        size: 60,             // 50% bigger than player size
+        size: 45,             // Size to fit nicely on grid (slightly smaller than grid cell)
         minCrates: 3,         // Minimum number of crates
         maxCrates: 8,         // Maximum number of crates
         spawnMargin: 100,     // Margin from arena edges
