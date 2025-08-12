@@ -237,7 +237,7 @@ export default class GameScene extends Phaser.Scene {
                 minTiles: config.minTiles,
                 maxTiles: config.maxTiles,
                 occupiedGrid,
-                createEntity: (x, y) => new Crate(this, x, y),
+                createEntity: (x, y, orientation) => new Crate(this, x, y), // orientation ignored for crates
                 addToGroup: (crate) => {
                     this.crateGroup.add(crate.sprite, true);
                     crate.sprite.body.setSize(config.size, config.size);

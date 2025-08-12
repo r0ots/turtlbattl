@@ -10,8 +10,8 @@ export const DebugConfig = {
   PLAYER_1_STARTING_UPGRADES: [
     // Example upgrades - uncomment to use:
     "homing",
-    //"rebound",
-    //"triple_shot",
+    "rebound",
+    "triple_shot",
     // 'damage_up',
     // 'speed_up'
   ],
