@@ -1,9 +1,6 @@
 import Phaser from 'phaser';
 import { Player } from '../entities/Player';
-import { Crate } from '../entities/Crate';
-import { Wall } from '../entities/Wall';
 import { GameConfig } from '../config/GameConfig';
-import { CRATE_PATTERNS, WALL_PATTERNS } from '../config/GamePatterns';
 import { GameStateManager } from '../managers/GameStateManager';
 import { SoundManager } from '../managers/SoundManager';
 import { EventBus } from '../events/EventBus';
@@ -13,9 +10,17 @@ import { BulletPool } from '../systems/BulletPool';
 import { PlayerStats } from '../systems/PlayerStats';
 import { ExplosionSystem } from '../systems/ExplosionSystem';
 import { EffectManager } from '../managers/EffectManager';
+import { RoundManager } from '../managers/RoundManager';
+import { DebugManager } from '../managers/DebugManager';
+import { BulletEffectFactory } from '../factories/BulletEffectFactory';
 import { PatternPlacer } from '../utils/PatternPlacer';
+import { ArenaBuilder } from '../builders/ArenaBuilder';
+import { VisualUtils } from '../utils/VisualUtils';
 import { DebugConfig } from '../config/DebugConfig';
 import { UpgradeItems } from '../data/UpgradeItems';
+import { CRATE_PATTERNS, WALL_PATTERNS } from '../config/GamePatterns';
+import { Crate } from '../entities/Crate';
+import { Wall } from '../entities/Wall';
 
 export default class GameScene extends Phaser.Scene {
     constructor() {
@@ -36,6 +41,11 @@ export default class GameScene extends Phaser.Scene {
         this.explosionSystem = new ExplosionSystem(this);
         this.effectManager = new EffectManager(this);
         
+        // Initialize new managers
+        this.bulletEffectFactory = new BulletEffectFactory(this, this.effectManager);
+        this.debugManager = new DebugManager(this);
+        // RoundManager will be initialized after GameStateManager is created
+        
         // Player stats for upgrades
         this.playerStats = [
             new PlayerStats(1),
@@ -50,7 +60,11 @@ export default class GameScene extends Phaser.Scene {
     
     setupEventListeners() {
         // Player events
-        this.eventBus.on(GameEvents.PLAYER_DEATH, (data) => this.onPlayerDeath(data.player));
+        this.eventBus.on(GameEvents.PLAYER_DEATH, (data) => {
+            if (this.roundManager) {
+                this.roundManager.onPlayerDeath(data.player.playerNumber);
+            }
+        });
         this.eventBus.on(GameEvents.BULLET_FIRED, (data) => {
             // Get player stats for bullet properties
             const playerStats = this.playerStats[data.playerNumber - 1];
@@ -90,6 +104,9 @@ export default class GameScene extends Phaser.Scene {
             
             this.gameState = new GameStateManager(this);
             
+            // Initialize RoundManager now that GameStateManager exists
+            this.roundManager = new RoundManager(this, this.gameState, this.eventBus);
+            
             // Set world bounds to match the arena (with margins)
             const width = this.cameras.main.width;
             const height = this.cameras.main.height;
@@ -115,7 +132,7 @@ export default class GameScene extends Phaser.Scene {
             this.createUI();
             
             // Setup debug keyboard controls
-            this.setupDebugControls();
+            this.debugManager.setupDebugControls();
             
             // Ensure gamepad is started and ready
             if (this.input.gamepad) {
@@ -199,69 +216,12 @@ export default class GameScene extends Phaser.Scene {
             }
             
             // Apply debug upgrades if enabled
-            this.applyDebugUpgrades();
+            this.debugManager.applyDebugUpgrades();
         } catch (error) {
             console.error('Failed to create players:', error);
         }
     }
     
-    applyDebugUpgrades() {
-        if (!DebugConfig.DEBUG_MODE) return;
-        
-        try {
-            // Apply upgrades to Player 1
-            const player1Upgrades = DebugConfig.getStartingUpgrades(1);
-            if (player1Upgrades.length > 0) {
-                player1Upgrades.forEach(upgradeId => {
-                    // Convert upgradeId to uppercase and find the upgrade object
-                    const upgradeKey = upgradeId.toUpperCase();
-                    const upgrade = UpgradeItems[upgradeKey];
-                    if (upgrade) {
-                        this.playerStats[0].applyUpgrade(upgrade);
-                    } else {
-                        console.warn(`Unknown upgrade ID: ${upgradeId}`);
-                    }
-                });
-                
-                if (DebugConfig.LOG_UPGRADES) {
-                    console.log('🔧 DEBUG: Player 1 starting upgrades:', player1Upgrades);
-                }
-            }
-            
-            // Apply upgrades to Player 2
-            const player2Upgrades = DebugConfig.getStartingUpgrades(2);
-            if (player2Upgrades.length > 0) {
-                player2Upgrades.forEach(upgradeId => {
-                    // Convert upgradeId to uppercase and find the upgrade object
-                    const upgradeKey = upgradeId.toUpperCase();
-                    const upgrade = UpgradeItems[upgradeKey];
-                    if (upgrade) {
-                        this.playerStats[1].applyUpgrade(upgrade);
-                    } else {
-                        console.warn(`Unknown upgrade ID: ${upgradeId}`);
-                    }
-                });
-                
-                if (DebugConfig.LOG_UPGRADES) {
-                    console.log('🔧 DEBUG: Player 2 starting upgrades:', player2Upgrades);
-                }
-            }
-            
-            // Update UI to show new stats
-            if (this.gameState) {
-                this.gameState.updateStatsUI();
-            }
-            
-            // Log current stats if enabled
-            if (DebugConfig.LOG_UPGRADES && (player1Upgrades.length > 0 || player2Upgrades.length > 0)) {
-                console.log('🔧 DEBUG: Player 1 stats:', this.playerStats[0].getStats());
-                console.log('🔧 DEBUG: Player 2 stats:', this.playerStats[1].getStats());
-            }
-            
-        } catch (error) {
-            console.error('Failed to apply debug upgrades:', error);
-        }
-    }
     
     createCrates() {
         try {
@@ -439,7 +399,7 @@ export default class GameScene extends Phaser.Scene {
                 }
                 
                 if (player.isDead) {
-                    this.onPlayerDeath(player);
+                    this.roundManager.onPlayerDeath(player.playerNumber);
                 }
             }
         } catch (error) {
@@ -646,36 +606,6 @@ export default class GameScene extends Phaser.Scene {
         }
     }
     
-    setupDebugControls() {
-        // Debug keyboard controls for testing
-        this.input.keyboard.on('keydown-ONE', () => {
-            if (this.players[0] && !this.players[0].isDead) {
-                this.players[0].takeDamage(9999);
-            }
-        });
-        
-        this.input.keyboard.on('keydown-TWO', () => {
-            if (this.players[1] && !this.players[1].isDead) {
-                this.players[1].takeDamage(9999);
-            }
-        });
-        
-        // Additional debug controls
-        this.input.keyboard.on('keydown-R', () => {
-            this.resetRound();
-        });
-        
-        this.input.keyboard.on('keydown-U', () => {
-            // Show current upgrades in console for debugging
-            this.playerStats.forEach((stats, index) => {
-                // Debug: Player upgrades and stats available in developer console
-            });
-        });
-        
-        // Debug controls enabled:
-        // Press 1: Kill Player 1, Press 2: Kill Player 2
-        // Press R: Restart Round, Press U: Show Upgrades
-    }
     
     createUI() {
         const centerX = this.cameras.main.width / 2;
@@ -757,7 +687,7 @@ export default class GameScene extends Phaser.Scene {
                 bullet.sprite.body.setVelocity(bullet.velocity.x, bullet.velocity.y);
                 
                 // Add flashy visual effects to bullets
-                this.addBulletEffects(bullet, stats);
+                this.bulletEffectFactory.applyEffects(bullet, stats);
             } else {
                 console.error('Failed to get bullet from pool or bullet has no sprite');
             }
@@ -766,248 +696,8 @@ export default class GameScene extends Phaser.Scene {
         }
     }
     
-    addBulletEffects(bullet, stats) {
-        if (!bullet || !bullet.sprite) return;
-        
-        try {
-            // Special effects based on upgrades
-            if (stats) {
-                // Homing bullets get rainbow tint cycling
-                if (stats.homing > 0) {
-                    this.createHomingEffect(bullet, stats.homing);
-                }
-                
-                // Explosive bullets get pulsing red glow
-                if (stats.explosive > 0) {
-                    this.createExplosiveEffect(bullet, stats.explosive);
-                }
-                
-                // Piercing bullets get glowing outline
-                if (stats.piercing > 0) {
-                    this.createPiercingEffect(bullet, stats.piercing);
-                }
-                
-                // Big bullets get size glow
-                if (stats.bulletSize > GameConfig.bullet.size) {
-                    bullet.sprite.setScale(bullet.sprite.scaleX * 1.2);
-                    this.createGlowEffect(bullet, 0xffffff, 1.5);
-                }
-            }
-            
-        } catch (error) {
-            console.error('Failed to apply bullet effects:', error);
-        }
-    }
-    
-    createHomingEffect(bullet, level) {
-        // Apply shader-based homing effect for smooth visuals
-        if (this.effectManager) {
-            this.effectManager.addHomingEffect(bullet.sprite);
-        }
-    }
-    
-    createExplosiveEffect(bullet, level) {
-        // Explosive visual effect can be added later
-    }
     
     
-    createPiercingEffect(bullet, level) {
-        // Apply simple tint for piercing bullets for now
-        bullet.sprite.setTint(0x00ffff);
-    }
-    
-    createGlowEffect(bullet, color, intensity) {
-        // Create a larger, semi-transparent copy behind the bullet for glow
-        const glow = this.add.graphics();
-        glow.fillStyle(color, 0.3);
-        glow.fillCircle(0, 0, bullet.bulletSize * intensity);
-        glow.setPosition(bullet.sprite.x, bullet.sprite.y);
-        glow.setDepth(bullet.sprite.depth - 1);
-        
-        // Update glow position to follow bullet
-        const updateGlow = () => {
-            if (bullet.isDestroyed || !bullet.sprite) {
-                glow.destroy();
-                return;
-            }
-            
-            glow.setPosition(bullet.sprite.x, bullet.sprite.y);
-            setTimeout(updateGlow, 16); // ~60fps
-        };
-        updateGlow();
-    }
-    
-    drawStar(graphics, x, y, points, innerRadius, outerRadius) {
-        const step = Math.PI / points;
-        const halfStep = step / 2;
-        
-        graphics.beginPath();
-        graphics.moveTo(x + Math.cos(-Math.PI / 2) * outerRadius, y + Math.sin(-Math.PI / 2) * outerRadius);
-        
-        for (let i = 0; i < points; i++) {
-            const angle = -Math.PI / 2 + i * step * 2;
-            
-            // Outer point
-            graphics.lineTo(
-                x + Math.cos(angle) * outerRadius,
-                y + Math.sin(angle) * outerRadius
-            );
-            
-            // Inner point
-            graphics.lineTo(
-                x + Math.cos(angle + step) * innerRadius,
-                y + Math.sin(angle + step) * innerRadius
-            );
-        }
-        
-        graphics.closePath();
-        graphics.fillPath();
-    }
-    
-    hsvToRgb(h, s, v) {
-        let r, g, b;
-        const i = Math.floor(h * 6);
-        const f = h * 6 - i;
-        const p = v * (1 - s);
-        const q = v * (1 - f * s);
-        const t = v * (1 - (1 - f) * s);
-        
-        switch (i % 6) {
-            case 0: r = v; g = t; b = p; break;
-            case 1: r = q; g = v; b = p; break;
-            case 2: r = p; g = v; b = t; break;
-            case 3: r = p; g = q; b = v; break;
-            case 4: r = t; g = p; b = v; break;
-            case 5: r = v; g = p; b = q; break;
-        }
-        
-        return {
-            r: Math.round(r * 255),
-            g: Math.round(g * 255),
-            b: Math.round(b * 255)
-        };
-    }
-    
-    onPlayerDeath(deadPlayer) {
-        try {
-            const winner = deadPlayer.playerNumber === 1 ? 2 : 1;
-            const loser = deadPlayer.playerNumber;
-            this.gameState.addScore(winner);
-            
-            // Show "Player X Wins!" animation first
-            this.showVictoryAnimation(winner, () => {
-                // After victory animation, start upgrade selection
-                this.startUpgradeSelection(loser, winner);
-            });
-            
-        } catch (error) {
-            console.error('Error handling player death:', error);
-        }
-    }
-    
-    showVictoryAnimation(winner, onComplete) {
-        // End the round state
-        this.gameState.endRound();
-        
-        // Show victory text
-        const color = winner === 1 ? '#4CAF50' : '#2196F3';
-        this.roundText.setText(`Player ${winner} Wins!`);
-        this.roundText.setColor(color);
-        
-        this.tweens.add({
-            targets: this.roundText,
-            scale: { from: 0, to: GameConfig.effects.roundEnd.scale },
-            duration: GameConfig.effects.roundEnd.duration,
-            ease: 'Back.easeOut',
-            onComplete: () => {
-                // Wait a moment, then proceed to upgrades
-                this.time.delayedCall(1000, () => {
-                    // Hide the victory text
-                    this.roundText.setScale(0);
-                    onComplete();
-                });
-            }
-        });
-    }
-    
-    startUpgradeSelection(loser, winner) {
-        // Disable game updates
-        this.isUpgradeActive = true;
-        
-        // Launch upgrade scene with turn-based selection
-        this.scene.launch('UpgradeScene', {
-            playerStats: this.playerStats,
-            deadPlayer: loser,
-            winner: winner,
-            onComplete: (selectedUpgrades) => {
-                this.onUpgradesComplete(selectedUpgrades, winner);
-            }
-        });
-    }
-    
-    onUpgradesComplete(selectedUpgrades, winner) {
-        // Update stats display after upgrades
-        if (this.gameState) {
-            this.gameState.updateStatsUI();
-        }
-        
-        this.endRound(winner);
-    }
-    
-    endRound(winner) {
-        // Re-enable game updates
-        this.isUpgradeActive = false;
-        
-        // Start new round immediately (victory animation already shown)
-        this.time.delayedCall(500, () => {
-            this.resetRound();
-        });
-    }
-    
-    resetRound() {
-        try {
-            // Properly release bullets through pool system to prevent memory leaks
-            this.bulletPool.releaseAllBullets();
-            this.bullets = [];
-            this.bulletGroup.clear(true, false); // Don't destroy sprites, pool handles them
-            
-            // Reset global occupied grid
-            this.globalOccupiedGrid = null;
-            
-            // Clear and recreate crates
-            this.crates.forEach(crate => {
-                if (crate && !crate.isDestroyed) {
-                    crate.destroy();
-                }
-            });
-            this.crates = [];
-            this.crateGroup.clear(true, true);
-            this.createCrates();
-            
-            // Clear and recreate walls
-            this.walls.forEach(wall => {
-                if (wall && !wall.isDestroyed) {
-                    wall.destroy();
-                }
-            });
-            this.walls = [];
-            this.wallGroup.clear(true, true);
-            this.createWalls();
-            
-            const width = this.cameras.main.width;
-            const height = this.cameras.main.height;
-            
-            this.players[0].respawn(width * 0.25, height * 0.5);
-            this.players[1].respawn(width * 0.75, height * 0.5);
-            
-            this.roundText.setText('');
-            this.roundText.setScale(1);
-            
-            this.gameState.startNewRound();
-        } catch (error) {
-            console.error('Error resetting round:', error);
-        }
-    }
     
     destroy() {
         // Clean up players
@@ -1074,6 +764,20 @@ export default class GameScene extends Phaser.Scene {
         if (this.eventBus) {
             this.eventBus.destroy();
             this.eventBus = null;
+        }
+        
+        // Clean up new managers
+        if (this.debugManager) {
+            this.debugManager.destroy();
+            this.debugManager = null;
+        }
+        
+        if (this.roundManager) {
+            this.roundManager = null;
+        }
+        
+        if (this.bulletEffectFactory) {
+            this.bulletEffectFactory = null;
         }
         
         super.destroy();
