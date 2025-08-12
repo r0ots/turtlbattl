@@ -9,6 +9,7 @@ export class EffectManager {
         this.initialized = false;
         this.globalColorIndex = 0;
         this.lastColorUpdate = 0;
+        this.trailParticles = []; // Store all trail particles
     }
     
     initialize() {
@@ -24,11 +25,14 @@ export class EffectManager {
         
         const graphics = this.scene.add.graphics();
         
-        // Create trail particle - small circle
+        // Create trail particle - soft circle
         graphics.clear();
-        graphics.fillStyle(0xffffff, 1);
-        graphics.fillCircle(4, 4, 4);
-        graphics.generateTexture('trail-particle', 8, 8);
+        for (let i = 8; i >= 1; i--) {
+            const alpha = Math.pow(i / 8, 2);
+            graphics.fillStyle(0xffffff, alpha);
+            graphics.fillCircle(8, 8, i);
+        }
+        graphics.generateTexture('trail-particle', 16, 16);
         
         graphics.destroy();
     }
@@ -43,24 +47,11 @@ export class EffectManager {
             bullet: bullet,
             type: 'homing',
             glow: glow,
-            trailEmitter: null,
             lastTrailX: bullet.x,
             lastTrailY: bullet.y,
-            colorIndex: 0
+            colorIndex: 0,
+            trailSprites: [] // Store trail sprites for this bullet
         };
-        
-        // Create a simple particle emitter for the trail
-        effects.trailEmitter = this.scene.add.particles(bullet.x, bullet.y, 'trail-particle', {
-            scale: { start: 1, end: 0.2 },
-            alpha: { start: 0.6, end: 0 },
-            lifespan: 400,
-            frequency: 50, // Less frequent emission
-            speed: 0,
-            blendMode: 'ADD',
-            emitting: false
-        });
-        
-        effects.trailEmitter.setDepth(bullet.depth - 1);
         
         this.activeEffects.set(bullet, effects);
         
@@ -84,36 +75,78 @@ export class EffectManager {
                 continue;
             }
             
-            // Update glow color (cheap operation)
+            // Update glow color
             if (effects.glow) {
                 effects.glow.color = currentColor;
             }
             
-            // Update trail
+            // Create trail sprites
             const dx = bullet.x - effects.lastTrailX;
             const dy = bullet.y - effects.lastTrailY;
             const distSq = dx * dx + dy * dy;
             
-            // Only emit particles if bullet has moved significantly (squared distance for performance)
-            if (distSq > 100) { // 10 pixels squared
-                if (effects.trailEmitter) {
-                    effects.trailEmitter.setPosition(bullet.x, bullet.y);
-                    effects.trailEmitter.particleTint = currentColor;
-                    effects.trailEmitter.explode(1);
-                }
+            // Only create trail if bullet has moved enough
+            if (distSq > 64) { // 8 pixels squared
+                // Create a trail sprite at the current position
+                const trailSprite = this.scene.add.sprite(bullet.x, bullet.y, 'trail-particle');
+                trailSprite.setTint(currentColor);
+                trailSprite.setAlpha(0.6);
+                trailSprite.setScale(0.8);
+                trailSprite.setDepth(bullet.depth - 1);
+                trailSprite.setBlendMode(Phaser.BlendModes.ADD);
+                
+                // Store reference to clean up later
+                effects.trailSprites.push(trailSprite);
+                this.trailParticles.push({
+                    sprite: trailSprite,
+                    createdAt: now,
+                    lifespan: 500
+                });
+                
+                // Fade out the trail sprite
+                this.scene.tweens.add({
+                    targets: trailSprite,
+                    alpha: 0,
+                    scale: 0.1,
+                    duration: 500,
+                    ease: 'Power2',
+                    onComplete: () => {
+                        trailSprite.destroy();
+                        const index = effects.trailSprites.indexOf(trailSprite);
+                        if (index > -1) {
+                            effects.trailSprites.splice(index, 1);
+                        }
+                    }
+                });
                 
                 effects.lastTrailX = bullet.x;
                 effects.lastTrailY = bullet.y;
             }
         }
+        
+        // Clean up old trail particles
+        this.trailParticles = this.trailParticles.filter(particle => {
+            if (now - particle.createdAt > particle.lifespan) {
+                if (particle.sprite && particle.sprite.active) {
+                    particle.sprite.destroy();
+                }
+                return false;
+            }
+            return true;
+        });
     }
     
     removeEffect(bullet) {
         const effects = this.activeEffects.get(bullet);
         if (!effects) return;
         
-        if (effects.trailEmitter) {
-            effects.trailEmitter.destroy();
+        // Clean up trail sprites
+        if (effects.trailSprites) {
+            effects.trailSprites.forEach(sprite => {
+                if (sprite && sprite.active) {
+                    sprite.destroy();
+                }
+            });
         }
         
         if (effects.glow && bullet.postFX) {
@@ -124,6 +157,14 @@ export class EffectManager {
     }
     
     destroy() {
+        // Clean up all trail particles
+        this.trailParticles.forEach(particle => {
+            if (particle.sprite && particle.sprite.active) {
+                particle.sprite.destroy();
+            }
+        });
+        this.trailParticles = [];
+        
         for (const [bullet] of this.activeEffects) {
             this.removeEffect(bullet);
         }
