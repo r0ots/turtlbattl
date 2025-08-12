@@ -12,6 +12,7 @@ import { CollisionSystem } from '../systems/CollisionSystem';
 import { BulletPool } from '../systems/BulletPool';
 import { PlayerStats } from '../systems/PlayerStats';
 import { ExplosionSystem } from '../systems/ExplosionSystem';
+import { EffectManager } from '../managers/EffectManager';
 import { PatternPlacer } from '../utils/PatternPlacer';
 import { DebugConfig } from '../config/DebugConfig';
 import { UpgradeItems } from '../data/UpgradeItems';
@@ -33,6 +34,7 @@ export default class GameScene extends Phaser.Scene {
         this.collisionSystem = new CollisionSystem(this);
         this.soundManager = new SoundManager(this);
         this.explosionSystem = new ExplosionSystem(this);
+        this.effectManager = new EffectManager(this);
         
         // Player stats for upgrades
         this.playerStats = [
@@ -81,10 +83,21 @@ export default class GameScene extends Phaser.Scene {
         // Load wall images
         this.load.image('wall_h', '/pictures/wall_h.png');
         this.load.image('wall_v', '/pictures/wall_v.png');
+        
+        // Preload shaders from files
+        this.load.glsl('homingShader', '/shaders/homing.glsl');
+        this.load.glsl('rainbowTrail', '/shaders/rainbow-trail.glsl');
+        this.load.glsl('magicParticles', '/shaders/magic-particles.glsl');
+        this.load.glsl('synapticTrail', '/shaders/synaptic-trail.glsl');
+        this.load.glsl('particleTrail', '/shaders/particle-trail.glsl');
+        this.load.glsl('testShader', '/shaders/test-shader.glsl');
     }
     
     create() {
         try {
+            // Pipeline is now registered via game config, no manual registration needed
+            console.log('✅ Using RainbowTrailPipeline from game config');
+            
             this.gameState = new GameStateManager(this);
             
             // Set world bounds to match the arena (with margins)
@@ -100,6 +113,9 @@ export default class GameScene extends Phaser.Scene {
             
             // Initialize pattern placer after scene is fully ready
             this.patternPlacer = new PatternPlacer(this);
+            
+            // Initialize shader system now that renderer is available
+            this.effectManager.initialize();
             
             this.createArena();
             this.createPlayers();
@@ -725,6 +741,11 @@ export default class GameScene extends Phaser.Scene {
                 }
                 this.lastStatsUpdate = time;
             }
+            
+            // Update shader manager
+            if (this.effectManager) {
+                this.effectManager.update();
+            }
         } catch (error) {
             console.error('Error during update:', error);
         }
@@ -750,12 +771,309 @@ export default class GameScene extends Phaser.Scene {
                 this.bulletGroup.add(bullet.sprite);
                 // Ensure velocity is maintained after adding to group
                 bullet.sprite.body.setVelocity(bullet.velocity.x, bullet.velocity.y);
+                
+                // Add flashy visual effects to bullets
+                this.addBulletEffects(bullet, stats);
             } else {
                 console.error('Failed to get bullet from pool or bullet has no sprite');
             }
         } catch (error) {
             console.error('Failed to create bullet:', error);
         }
+    }
+    
+    addBulletEffects(bullet, stats) {
+        if (!bullet || !bullet.sprite) return;
+        
+        try {
+            // Special effects based on upgrades
+            if (stats) {
+                // Homing bullets get rainbow tint cycling
+                if (stats.homing > 0) {
+                    this.createHomingEffect(bullet, stats.homing);
+                }
+                
+                // Explosive bullets get pulsing red glow
+                if (stats.explosive > 0) {
+                    this.createExplosiveEffect(bullet, stats.explosive);
+                }
+                
+                // Piercing bullets get glowing outline
+                if (stats.piercing > 0) {
+                    this.createPiercingEffect(bullet, stats.piercing);
+                }
+                
+                // Big bullets get size glow
+                if (stats.bulletSize > GameConfig.bullet.size) {
+                    bullet.sprite.setScale(bullet.sprite.scaleX * 1.2);
+                    this.createGlowEffect(bullet, 0xffffff, 1.5);
+                }
+            }
+            
+        } catch (error) {
+            console.error('Failed to apply bullet effects:', error);
+        }
+    }
+    
+    createHomingEffect(bullet, level) {
+        // Apply shader-based homing effect for smooth visuals
+        if (this.effectManager) {
+            this.effectManager.addHomingEffect(bullet.sprite);
+        }
+    }
+    
+    
+    
+    createExplosiveEffect(bullet, level) {
+        // Apply shader-based explosive effect for smooth fire/explosion visuals
+        // Explosive visual effect can be added later
+    }
+    
+    createFireParticles(bullet, level) {
+        const particles = [];
+        const particleCount = 6 + level * 3;
+        
+        for (let i = 0; i < particleCount; i++) {
+            const particle = this.add.graphics();
+            particle.fillStyle(0xff4400, 0.8);
+            particle.fillCircle(0, 0, 2 + Math.random() * 3);
+            particle.setPosition(bullet.sprite.x, bullet.sprite.y);
+            particle.setDepth(bullet.sprite.depth + 1);
+            particles.push(particle);
+        }
+        
+        const updateParticles = () => {
+            if (bullet.isDestroyed || !bullet.sprite) {
+                particles.forEach(p => p.destroy());
+                return;
+            }
+            
+            const elapsed = Date.now() / 100;
+            
+            particles.forEach((particle, index) => {
+                const angle = (index / particles.length) * Math.PI * 2 + elapsed * 0.1;
+                const radius = 15 + 8 * Math.sin(elapsed * 0.15 + index);
+                const offsetX = Math.cos(angle) * radius;
+                const offsetY = Math.sin(angle) * radius;
+                
+                particle.setPosition(
+                    bullet.sprite.x + offsetX,
+                    bullet.sprite.y + offsetY
+                );
+                
+                // Flickering fire colors
+                const flicker = Math.random();
+                let color;
+                if (flicker > 0.7) {
+                    color = 0xffffff; // White hot
+                } else if (flicker > 0.4) {
+                    color = 0xffaa00; // Orange
+                } else {
+                    color = 0xff4400; // Red
+                }
+                
+                particle.clear();
+                particle.fillStyle(color, 0.6 + Math.random() * 0.4);
+                const size = 2 + Math.random() * 3;
+                particle.fillCircle(0, 0, size);
+                
+                // Flickering alpha
+                particle.setAlpha(0.5 + 0.5 * Math.random());
+            });
+            
+            setTimeout(updateParticles, 50);
+        };
+        updateParticles();
+    }
+    
+    createHeatWave(bullet, level) {
+        const waves = [];
+        
+        const createWave = () => {
+            if (bullet.isDestroyed || !bullet.sprite) return;
+            
+            const wave = this.add.graphics();
+            wave.setPosition(bullet.sprite.x, bullet.sprite.y);
+            wave.setDepth(bullet.sprite.depth - 1);
+            
+            // Heat distortion ring
+            wave.lineStyle(1, 0xff8800, 0.3);
+            wave.strokeCircle(0, 0, 8);
+            
+            this.tweens.add({
+                targets: wave,
+                scaleX: 4,
+                scaleY: 4,
+                alpha: 0,
+                duration: 800,
+                ease: 'Power2',
+                onComplete: () => wave.destroy()
+            });
+            
+            // Create waves continuously
+            setTimeout(createWave, 200);
+        };
+        
+        createWave();
+    }
+    
+    createExplosiveGlow(bullet, level) {
+        // Create intense fire glow layers
+        const glowLayers = [];
+        const layerCount = 4 + level;
+        
+        for (let i = 0; i < layerCount; i++) {
+            const glow = this.add.graphics();
+            glow.setPosition(bullet.sprite.x, bullet.sprite.y);
+            glow.setDepth(bullet.sprite.depth - 3 - i);
+            
+            glowLayers.push(glow);
+        }
+        
+        const updateGlow = () => {
+            if (bullet.isDestroyed || !bullet.sprite) {
+                glowLayers.forEach(glow => glow.destroy());
+                return;
+            }
+            
+            const elapsed = Date.now() / 1000;
+            
+            glowLayers.forEach((glow, index) => {
+                glow.setPosition(bullet.sprite.x, bullet.sprite.y);
+                glow.clear();
+                
+                // Fire colors: white core, yellow, orange, red outer
+                const colors = [0xffffff, 0xffff88, 0xffaa44, 0xff4400, 0x880000];
+                const color = colors[Math.min(index, colors.length - 1)];
+                
+                // Flickering intensity
+                const flicker = 0.2 + 0.15 * Math.sin(elapsed * 8 + index * 2) + Math.random() * 0.1;
+                const radius = 8 + index * 4 + Math.sin(elapsed * 6 + index) * 2;
+                
+                glow.fillStyle(color, flicker);
+                glow.fillCircle(0, 0, radius);
+            });
+            
+            setTimeout(updateGlow, 40); // Faster flickering
+        };
+        updateGlow();
+    }
+    
+    createEmberTrail(bullet, level) {
+        const embers = [];
+        
+        const createEmber = () => {
+            if (bullet.isDestroyed || !bullet.sprite) return;
+            
+            const ember = this.add.graphics();
+            ember.setPosition(
+                bullet.sprite.x + (Math.random() - 0.5) * 10,
+                bullet.sprite.y + (Math.random() - 0.5) * 10
+            );
+            ember.setDepth(bullet.sprite.depth - 1);
+            
+            // Random ember color
+            const colors = [0xffffff, 0xffdd00, 0xff8800, 0xff4400];
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            
+            ember.fillStyle(color, 0.8);
+            ember.fillCircle(0, 0, 1 + Math.random() * 2);
+            
+            // Animate ember fading and falling behind
+            this.tweens.add({
+                targets: ember,
+                x: ember.x + (Math.random() - 0.5) * 20,
+                y: ember.y + (Math.random() - 0.5) * 20,
+                alpha: 0,
+                scaleX: 0.1,
+                scaleY: 0.1,
+                duration: 300 + Math.random() * 200,
+                ease: 'Power2',
+                onComplete: () => ember.destroy()
+            });
+            
+            // Create more embers
+            setTimeout(createEmber, 80 + Math.random() * 40);
+        };
+        
+        createEmber();
+    }
+    
+    createPiercingEffect(bullet, level) {
+        // Apply simple tint for piercing bullets for now
+        bullet.sprite.setTint(0x00ffff);
+    }
+    
+    createGlowEffect(bullet, color, intensity) {
+        // Create a larger, semi-transparent copy behind the bullet for glow
+        const glow = this.add.graphics();
+        glow.fillStyle(color, 0.3);
+        glow.fillCircle(0, 0, bullet.bulletSize * intensity);
+        glow.setPosition(bullet.sprite.x, bullet.sprite.y);
+        glow.setDepth(bullet.sprite.depth - 1);
+        
+        // Update glow position to follow bullet
+        const updateGlow = () => {
+            if (bullet.isDestroyed || !bullet.sprite) {
+                glow.destroy();
+                return;
+            }
+            
+            glow.setPosition(bullet.sprite.x, bullet.sprite.y);
+            setTimeout(updateGlow, 16); // ~60fps
+        };
+        updateGlow();
+    }
+    
+    drawStar(graphics, x, y, points, innerRadius, outerRadius) {
+        const step = Math.PI / points;
+        const halfStep = step / 2;
+        
+        graphics.beginPath();
+        graphics.moveTo(x + Math.cos(-Math.PI / 2) * outerRadius, y + Math.sin(-Math.PI / 2) * outerRadius);
+        
+        for (let i = 0; i < points; i++) {
+            const angle = -Math.PI / 2 + i * step * 2;
+            
+            // Outer point
+            graphics.lineTo(
+                x + Math.cos(angle) * outerRadius,
+                y + Math.sin(angle) * outerRadius
+            );
+            
+            // Inner point
+            graphics.lineTo(
+                x + Math.cos(angle + step) * innerRadius,
+                y + Math.sin(angle + step) * innerRadius
+            );
+        }
+        
+        graphics.closePath();
+        graphics.fillPath();
+    }
+    
+    hsvToRgb(h, s, v) {
+        let r, g, b;
+        const i = Math.floor(h * 6);
+        const f = h * 6 - i;
+        const p = v * (1 - s);
+        const q = v * (1 - f * s);
+        const t = v * (1 - (1 - f) * s);
+        
+        switch (i % 6) {
+            case 0: r = v; g = t; b = p; break;
+            case 1: r = q; g = v; b = p; break;
+            case 2: r = p; g = v; b = t; break;
+            case 3: r = p; g = q; b = v; break;
+            case 4: r = t; g = p; b = v; break;
+            case 5: r = v; g = p; b = q; break;
+        }
+        
+        return {
+            r: Math.round(r * 255),
+            g: Math.round(g * 255),
+            b: Math.round(b * 255)
+        };
     }
     
     onPlayerDeath(deadPlayer) {

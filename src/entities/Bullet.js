@@ -446,6 +446,18 @@ export class Bullet {
         
         this.isDestroyed = true;
         
+        // Mark sprite as destroyed and clean up shader effects BEFORE destroying sprite
+        if (this.sprite) {
+            this.sprite.setData('isDestroyed', true);
+            this.sprite.setActive(false);
+            this.sprite.setVisible(false);
+            
+            // Clean up any visual effects immediately
+            if (this.scene && this.scene.effectManager) {
+                this.scene.effectManager.removeEffect(this.sprite);
+            }
+        }
+        
         // If this is a pooled bullet, try to release it back to pool
         if (this.isPooled && this.release) {
             this.release();
