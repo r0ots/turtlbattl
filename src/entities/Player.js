@@ -158,7 +158,6 @@ export class Player {
             // Visual shield effect
             this.createShieldEffect();
             
-            console.log(`Shield blocked damage for Player ${this.playerNumber}`);
             return; // No damage taken
         }
         
@@ -362,7 +361,6 @@ export class Player {
             this.stats.shieldCooldown -= delta;
             if (this.stats.shieldCooldown <= 0) {
                 this.stats.shieldActive = true;
-                console.log(`Shield recharged for Player ${this.playerNumber}`);
             }
         } else if (!this.stats.shieldActive) {
             // Shield should be active if cooldown is 0

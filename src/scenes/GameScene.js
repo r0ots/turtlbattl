@@ -83,20 +83,10 @@ export default class GameScene extends Phaser.Scene {
         // Load wall images
         this.load.image('wall_h', '/pictures/wall_h.png');
         this.load.image('wall_v', '/pictures/wall_v.png');
-        
-        // Preload shaders from files
-        this.load.glsl('homingShader', '/shaders/homing.glsl');
-        this.load.glsl('rainbowTrail', '/shaders/rainbow-trail.glsl');
-        this.load.glsl('magicParticles', '/shaders/magic-particles.glsl');
-        this.load.glsl('synapticTrail', '/shaders/synaptic-trail.glsl');
-        this.load.glsl('particleTrail', '/shaders/particle-trail.glsl');
-        this.load.glsl('testShader', '/shaders/test-shader.glsl');
     }
     
     create() {
         try {
-            // Pipeline is now registered via game config, no manual registration needed
-            console.log('✅ Using RainbowTrailPipeline from game config');
             
             this.gameState = new GameStateManager(this);
             
@@ -132,12 +122,12 @@ export default class GameScene extends Phaser.Scene {
                 this.input.gamepad.start();
                 
                 this.input.gamepad.once('connected', (pad) => {
-                    console.log('Gamepad connected:', pad.id);
+                    // Gamepad connected
                 });
                 
                 // Also check for already connected gamepads
                 this.input.gamepad.once('down', (pad, button, index) => {
-                    console.log('Gamepad input detected:', pad.id);
+                    // Gamepad input detected
                 });
             }
         } catch (error) {
@@ -659,14 +649,12 @@ export default class GameScene extends Phaser.Scene {
     setupDebugControls() {
         // Debug keyboard controls for testing
         this.input.keyboard.on('keydown-ONE', () => {
-            console.log('DEBUG: Killing Player 1');
             if (this.players[0] && !this.players[0].isDead) {
                 this.players[0].takeDamage(9999);
             }
         });
         
         this.input.keyboard.on('keydown-TWO', () => {
-            console.log('DEBUG: Killing Player 2');
             if (this.players[1] && !this.players[1].isDead) {
                 this.players[1].takeDamage(9999);
             }
@@ -674,23 +662,19 @@ export default class GameScene extends Phaser.Scene {
         
         // Additional debug controls
         this.input.keyboard.on('keydown-R', () => {
-            console.log('DEBUG: Restarting round');
             this.resetRound();
         });
         
         this.input.keyboard.on('keydown-U', () => {
-            console.log('DEBUG: Current upgrades:');
+            // Show current upgrades in console for debugging
             this.playerStats.forEach((stats, index) => {
-                console.log(`Player ${index + 1} upgrades:`, stats.upgrades);
-                console.log(`Player ${index + 1} stats:`, stats.getStats());
+                // Debug: Player upgrades and stats available in developer console
             });
         });
         
-        console.log('DEBUG CONTROLS ENABLED:');
-        console.log('- Press 1: Kill Player 1');
-        console.log('- Press 2: Kill Player 2');
-        console.log('- Press R: Restart Round');
-        console.log('- Press U: Show Upgrades');
+        // Debug controls enabled:
+        // Press 1: Kill Player 1, Press 2: Kill Player 2
+        // Press R: Restart Round, Press U: Show Upgrades
     }
     
     createUI() {
@@ -822,182 +806,10 @@ export default class GameScene extends Phaser.Scene {
         }
     }
     
-    
-    
     createExplosiveEffect(bullet, level) {
-        // Apply shader-based explosive effect for smooth fire/explosion visuals
         // Explosive visual effect can be added later
     }
     
-    createFireParticles(bullet, level) {
-        const particles = [];
-        const particleCount = 6 + level * 3;
-        
-        for (let i = 0; i < particleCount; i++) {
-            const particle = this.add.graphics();
-            particle.fillStyle(0xff4400, 0.8);
-            particle.fillCircle(0, 0, 2 + Math.random() * 3);
-            particle.setPosition(bullet.sprite.x, bullet.sprite.y);
-            particle.setDepth(bullet.sprite.depth + 1);
-            particles.push(particle);
-        }
-        
-        const updateParticles = () => {
-            if (bullet.isDestroyed || !bullet.sprite) {
-                particles.forEach(p => p.destroy());
-                return;
-            }
-            
-            const elapsed = Date.now() / 100;
-            
-            particles.forEach((particle, index) => {
-                const angle = (index / particles.length) * Math.PI * 2 + elapsed * 0.1;
-                const radius = 15 + 8 * Math.sin(elapsed * 0.15 + index);
-                const offsetX = Math.cos(angle) * radius;
-                const offsetY = Math.sin(angle) * radius;
-                
-                particle.setPosition(
-                    bullet.sprite.x + offsetX,
-                    bullet.sprite.y + offsetY
-                );
-                
-                // Flickering fire colors
-                const flicker = Math.random();
-                let color;
-                if (flicker > 0.7) {
-                    color = 0xffffff; // White hot
-                } else if (flicker > 0.4) {
-                    color = 0xffaa00; // Orange
-                } else {
-                    color = 0xff4400; // Red
-                }
-                
-                particle.clear();
-                particle.fillStyle(color, 0.6 + Math.random() * 0.4);
-                const size = 2 + Math.random() * 3;
-                particle.fillCircle(0, 0, size);
-                
-                // Flickering alpha
-                particle.setAlpha(0.5 + 0.5 * Math.random());
-            });
-            
-            setTimeout(updateParticles, 50);
-        };
-        updateParticles();
-    }
-    
-    createHeatWave(bullet, level) {
-        const waves = [];
-        
-        const createWave = () => {
-            if (bullet.isDestroyed || !bullet.sprite) return;
-            
-            const wave = this.add.graphics();
-            wave.setPosition(bullet.sprite.x, bullet.sprite.y);
-            wave.setDepth(bullet.sprite.depth - 1);
-            
-            // Heat distortion ring
-            wave.lineStyle(1, 0xff8800, 0.3);
-            wave.strokeCircle(0, 0, 8);
-            
-            this.tweens.add({
-                targets: wave,
-                scaleX: 4,
-                scaleY: 4,
-                alpha: 0,
-                duration: 800,
-                ease: 'Power2',
-                onComplete: () => wave.destroy()
-            });
-            
-            // Create waves continuously
-            setTimeout(createWave, 200);
-        };
-        
-        createWave();
-    }
-    
-    createExplosiveGlow(bullet, level) {
-        // Create intense fire glow layers
-        const glowLayers = [];
-        const layerCount = 4 + level;
-        
-        for (let i = 0; i < layerCount; i++) {
-            const glow = this.add.graphics();
-            glow.setPosition(bullet.sprite.x, bullet.sprite.y);
-            glow.setDepth(bullet.sprite.depth - 3 - i);
-            
-            glowLayers.push(glow);
-        }
-        
-        const updateGlow = () => {
-            if (bullet.isDestroyed || !bullet.sprite) {
-                glowLayers.forEach(glow => glow.destroy());
-                return;
-            }
-            
-            const elapsed = Date.now() / 1000;
-            
-            glowLayers.forEach((glow, index) => {
-                glow.setPosition(bullet.sprite.x, bullet.sprite.y);
-                glow.clear();
-                
-                // Fire colors: white core, yellow, orange, red outer
-                const colors = [0xffffff, 0xffff88, 0xffaa44, 0xff4400, 0x880000];
-                const color = colors[Math.min(index, colors.length - 1)];
-                
-                // Flickering intensity
-                const flicker = 0.2 + 0.15 * Math.sin(elapsed * 8 + index * 2) + Math.random() * 0.1;
-                const radius = 8 + index * 4 + Math.sin(elapsed * 6 + index) * 2;
-                
-                glow.fillStyle(color, flicker);
-                glow.fillCircle(0, 0, radius);
-            });
-            
-            setTimeout(updateGlow, 40); // Faster flickering
-        };
-        updateGlow();
-    }
-    
-    createEmberTrail(bullet, level) {
-        const embers = [];
-        
-        const createEmber = () => {
-            if (bullet.isDestroyed || !bullet.sprite) return;
-            
-            const ember = this.add.graphics();
-            ember.setPosition(
-                bullet.sprite.x + (Math.random() - 0.5) * 10,
-                bullet.sprite.y + (Math.random() - 0.5) * 10
-            );
-            ember.setDepth(bullet.sprite.depth - 1);
-            
-            // Random ember color
-            const colors = [0xffffff, 0xffdd00, 0xff8800, 0xff4400];
-            const color = colors[Math.floor(Math.random() * colors.length)];
-            
-            ember.fillStyle(color, 0.8);
-            ember.fillCircle(0, 0, 1 + Math.random() * 2);
-            
-            // Animate ember fading and falling behind
-            this.tweens.add({
-                targets: ember,
-                x: ember.x + (Math.random() - 0.5) * 20,
-                y: ember.y + (Math.random() - 0.5) * 20,
-                alpha: 0,
-                scaleX: 0.1,
-                scaleY: 0.1,
-                duration: 300 + Math.random() * 200,
-                ease: 'Power2',
-                onComplete: () => ember.destroy()
-            });
-            
-            // Create more embers
-            setTimeout(createEmber, 80 + Math.random() * 40);
-        };
-        
-        createEmber();
-    }
     
     createPiercingEffect(bullet, level) {
         // Apply simple tint for piercing bullets for now
@@ -1082,8 +894,6 @@ export default class GameScene extends Phaser.Scene {
             const loser = deadPlayer.playerNumber;
             this.gameState.addScore(winner);
             
-            console.log(`DEBUG: Showing victory animation, then upgrade selection`);
-            
             // Show "Player X Wins!" animation first
             this.showVictoryAnimation(winner, () => {
                 // After victory animation, start upgrade selection
@@ -1121,8 +931,6 @@ export default class GameScene extends Phaser.Scene {
     }
     
     startUpgradeSelection(loser, winner) {
-        console.log(`DEBUG: Starting upgrade selection - Dead player ${loser} selects first, winner ${winner} second`);
-        
         // Disable game updates
         this.isUpgradeActive = true;
         
@@ -1138,8 +946,6 @@ export default class GameScene extends Phaser.Scene {
     }
     
     onUpgradesComplete(selectedUpgrades, winner) {
-        console.log(`DEBUG: Both players completed upgrade selection:`, selectedUpgrades);
-        
         // Update stats display after upgrades
         if (this.gameState) {
             this.gameState.updateStatsUI();
@@ -1149,8 +955,6 @@ export default class GameScene extends Phaser.Scene {
     }
     
     endRound(winner) {
-        console.log('endRound called - starting new round after upgrades');
-        
         // Re-enable game updates
         this.isUpgradeActive = false;
         

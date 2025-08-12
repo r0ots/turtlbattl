@@ -78,7 +78,6 @@ export class PatternPlacer {
             }
         }
 
-        console.log(`Created ${totalTiles} ${entityType} tiles in ${arrangementCount} arrangements (target: ${minTiles}-${maxTiles})`);
         return totalTiles;
     }
 

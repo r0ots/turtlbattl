@@ -25,8 +25,6 @@ export class UpgradeScene extends Phaser.Scene {
         const width = this.cameras.main.width;
         const height = this.cameras.main.height;
         
-        console.log(`DEBUG UpgradeScene: Creating scene - Dead player ${this.deadPlayer} selects first`);
-        
         // Initialize event bus and physics
         this.eventBus = new EventBus();
         
@@ -36,7 +34,6 @@ export class UpgradeScene extends Phaser.Scene {
         // Generate shared pool of 5 upgrades based on first player's available upgrades
         const firstPlayerStats = this.playerStats[this.deadPlayer - 1];
         this.sharedUpgrades = getRandomUpgradesForFirstPlayer(5, firstPlayerStats);
-        console.log(`DEBUG: Generated ${this.sharedUpgrades.length} upgrades for first player (P${this.deadPlayer})`);
         
         // Create upgrade display
         this.createUpgradeDisplay();
@@ -343,15 +340,13 @@ export class UpgradeScene extends Phaser.Scene {
                 if (canTake) {
                     this.confirmSelection(closestIndex);
                 } else {
-                    console.log(`DEBUG: Player ${this.currentSelectingPlayer} cannot take ${this.sharedUpgrades[closestIndex].name} (already has it)`);
+                    // Player cannot take this upgrade (already has it)
                 }
             }
         }
     }
     
     confirmSelection(selectedIndex) {
-        console.log(`DEBUG UpgradeScene: Player ${this.currentSelectingPlayer} selected index ${selectedIndex}`);
-        
         const selectedUpgrade = this.sharedUpgrades[selectedIndex];
         
         // Apply upgrade to current player
@@ -359,8 +354,6 @@ export class UpgradeScene extends Phaser.Scene {
         
         // Store the selected upgrade
         this.selectedUpgrades[this.currentSelectingPlayer - 1] = selectedUpgrade;
-        
-        console.log(`DEBUG UpgradeScene: Player ${this.currentSelectingPlayer} selected:`, selectedUpgrade.name);
         
         // Visual feedback - make selected item disappear
         const selectedItem = this.upgradeItems[selectedIndex];
@@ -376,15 +369,12 @@ export class UpgradeScene extends Phaser.Scene {
         
         // Check if this was the second selection (both players done)
         if (this.selectionStep === 2) {
-            console.log('DEBUG UpgradeScene: Both players selected, finishing');
             this.finishUpgradeSelection();
         } else {
             // Move to next player's turn
             this.selectionStep = 2;
             this.currentSelectingPlayer = this.winner;
             this.updateUI();
-            
-            console.log(`DEBUG UpgradeScene: Now it's Player ${this.currentSelectingPlayer}'s turn`);
         }
     }
     
